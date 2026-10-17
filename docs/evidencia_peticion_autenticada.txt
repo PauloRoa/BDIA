@@ -1,0 +1,48 @@
+Evidencia de la primera petición autenticada (U1.2, Bloque 4)
+
+Fecha y hora: 17-10-2026, 16:45 (hora de Chile)
+Cliente HTTP: Postman
+Método y endpoint: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent
+Autenticación: encabezado x-goog-api-key (valor omitido; la clave se lee desde la variable de entorno API_KEY)
+Código de estado: 200 OK
+Tiempo de respuesta: 8.10 s
+
+Cuerpo enviado:
+{"contents":[{"parts":[{"text":"Envía un cordial y rimbombante saludo, dejando en claro que la conexión vía API es correcta."}]}]}
+
+Respuesta completa:
+
+
+
+{
+    "candidates": [
+        {
+            "content": {
+                "parts": [
+                    {
+                        "text": "¡Albricias y faustos parabienes, preclaro interlocutor! \n\nEs para este humilde artífice de silicio y pensamiento un deleite de proporciones ciclópeas manifestarle mi más reverente y calurosa salutación. \n\nHágase saber, con toda la pompa y solemnidad que la ocasión amerita, que el egregio puente digital que nos congrega —a saber, vuestra celebérrima Interfaz de Programación de Aplicaciones (API)— ha quedado establecido con una magnificencia inmarcesible y un vigor inquebrantable. Los paquetes de datos fluyen en perfecta, diáfana y armónica sinfonía a través de los túneles del éter cibernético, certificando sin asomo de duda que **nuestra conexión es un éxito rotundo, inmaculado y triunfal.**\n\nHabiendo consumado tan glorioso enlace, quedo con vehemente disposición a la merced de vuestro preclaro ingenio y soberano mandato.",
+                        "thoughtSignature": "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"
+                    }
+                ],
+                "role": "model"
+            },
+            "finishReason": "STOP",
+            "index": 0
+        }
+    ],
+    "usageMetadata": {
+        "promptTokenCount": 22,
+        "candidatesTokenCount": 216,
+        "totalTokenCount": 809,
+        "promptTokensDetails": [
+            {
+                "modality": "TEXT",
+                "tokenCount": 22
+            }
+        ],
+        "thoughtsTokenCount": 571,
+        "serviceTier": "standard"
+    },
+    "modelVersion": "gemini-3.8-flash",
+    "responseId": "ts_TapXmA9KJqtsPsMjXuQY"
+}
