@@ -4,17 +4,29 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MODELO = "gemini-flash-latest"
-URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODELO}:generateContent"
+
+def armar_peticion(prompt):
+    api_key = os.getenv("API_KEY")
+    modelo = "gemini-flash-latest"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+    headers = {"x-goog-api-key": api_key}
+    body = {"contents": [{"parts": [{"text": prompt}]}]}
+    return url, headers, body
+
+
+def enviar_peticion(url, headers, body):
+    respuesta = requests.post(url, headers=headers, json=body, timeout=60)
+    return respuesta.json()
+
+
+def extraer_texto(datos):
+    return datos["candidates"][0]["content"]["parts"][0]["text"]
 
 
 def generar_respuesta(prompt):
-    api_key = os.getenv("API_KEY")
-    headers = {"x-goog-api-key": api_key}
-    body = {"contents": [{"parts": [{"text": prompt}]}]}
-    respuesta = requests.post(URL, headers=headers, json=body, timeout=60)
-    datos = respuesta.json()
-    return datos["candidates"][0]["content"]["parts"][0]["text"]
+    url, headers, body = armar_peticion(prompt)
+    datos = enviar_peticion(url, headers, body)
+    return extraer_texto(datos)
 
 
 print(generar_respuesta("Confirma en una frase corta que esta conexión funciona."))
