@@ -4,14 +4,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+#Constantes
+API_KEY = os.getenv("API_KEY")
+MODELO = "gemini-3.5-flash-lite"
+URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
+    
+
 
 def armar_peticion(prompt):
     if not prompt:
         raise ValueError("La pregunta no puede estar vacía.")
-    api_key = os.getenv("API_KEY")
-    modelo = "gemini-flash-latest"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
-    headers = {"x-goog-api-key": api_key}
+    url = f"{URL_BASE}{MODELO}:generateContent"
+    headers = {"x-goog-api-key": API_KEY}
     body = {"contents": [{"parts": [{"text": prompt}]}]}
     return url, headers, body
 
@@ -37,13 +41,24 @@ def extraer_texto(respuesta_json):
         raise RuntimeError(f"La respuesta no trae el texto generado en el lugar esperado: {error_dato}")
 
 
+def calcular_costo(respuesta_json, precio_entrada, precio_salida):
+    try:
+        uso = respuesta_json["usageMetadata"]
+        tokens_entrada = uso["promptTokenCount"]
+        tokens_salida = uso["candidatesTokenCount"]
+    except KeyError as error_dato:
+        raise RuntimeError(f"La respuesta no trae el conteo de tokens en el lugar esperado: {error_dato}")
+    return (tokens_entrada * precio_entrada) + (tokens_salida * precio_salida)
+
+
 def generar_respuesta(prompt):
     url, headers, body = armar_peticion(prompt)
     respuesta_json = enviar_peticion(url, headers, body)
     return extraer_texto(respuesta_json)
 
 
-try:
-    print(generar_respuesta("Confirma que esta conexión vía API funciona correctamente."))
-except (ValueError, RuntimeError) as error:
-    print(f"No se pudo generar la respuesta: {error}")
+if __name__ == "__main__":
+    try:
+        print(generar_respuesta("Confirma que esta conexión vía API funciona correctamente, tu respuesta es la confirmación."))
+    except (ValueError, RuntimeError) as error:
+        print(f"No se pudo generar la respuesta: {error}")
