@@ -1,0 +1,152 @@
+[
+  {
+    "gemini-3.5-flash-lite": {
+      "latencias": [
+        2.2248866999871098,
+        2.179080600006273,
+        2.1461219000048004,
+        2.2375294000084978
+      ],
+      "latencia_promedio": 2.1969046500016702,
+      "costo_promedio": 0.000276975,
+      "uso": {
+        "promptTokenCount": 42,
+        "candidatesTokenCount": 121,
+        "totalTokenCount": 163,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 42
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "respuesta_1": "Propondría cinco tablas principales: **Clientes** (compradores), **Productos** (ropa y stock), **Pedidos** (cabecera de compras), **Detalle_Pedido** (ítems por compra) y **Pagos**. Los **Clientes** se relacionan con **Pedidos** (uno a muchos), y estos con sus **Pagos** (uno a uno o uno a muchos). A su vez, **Pedidos** y **Productos** se conectan mediante **Detalle_Pedido** (muchos a muchos) para registrar qué prendas y cantidades se compraron.",
+      "respuesta_2": "Propondría tablas de **Clientes, Proveedores, Categorías, Productos, Ventas, Detalles de Venta y Movimientos de Inventario**. \nPara los precios, el producto almacenaría el precio de venta actual y el costo de adquisición, registrando también el precio histórico en el detalle de cada venta. \nLas entradas (compras a proveedores) y salidas (ventas o mermas) se registrarían centralmente en la tabla de **Movimientos**, la cual actualizará automáticamente el stock actual en la tabla de Productos."
+    },
+    "gemini-3.1-flash-lite": {
+      "latencias": [
+        2.290997400006745,
+        4.397089300007792,
+        1.95896580000408,
+        2.0723455999977887
+      ],
+      "latencia_promedio": 2.6798495250041015,
+      "costo_promedio": 0.000126375,
+      "uso": {
+        "promptTokenCount": 42,
+        "candidatesTokenCount": 68,
+        "totalTokenCount": 110,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 42
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "respuesta_1": "Propongo las tablas **Clientes**, **Productos**, **Pedidos** y **Detalle_Pedidos**. Los clientes realizan múltiples pedidos (1:N), cada pedido contiene varios productos a través de la tabla intermedia \"Detalle_Pedidos\" (N:M), la cual registra cantidades y precios unitarios históricos para mantener la integridad contable.",
+      "respuesta_2": "Propongo tablas para **Productos** (detalles y stock actual), **Categorías**, **Ventas** (fecha/total) y **DetalleVentas** (ítems vendidos). Los precios se gestionan en la tabla *Productos* con un campo de precio actual, pero deben replicarse en *DetalleVentas* para mantener un histórico inalterable ante futuros cambios. Las entradas y salidas se registran en una tabla de **Movimientos** vinculada a *Productos*, que contabiliza las compras a proveedores (entradas) o ajustes por mermas/ventas (salidas), permitiendo auditar el stock en tiempo real mediante disparadores (triggers) o procesos de actualización automática."
+    }
+  },
+  {
+    "gemini-3.5-flash-lite": {
+      "latencias": [
+        5.7559371999814175,
+        7.001418100000592,
+        6.012297200009925,
+        6.159661399986362
+      ],
+      "latencia_promedio": 6.232328474994574,
+      "costo_promedio": 0.000285725,
+      "uso": {
+        "promptTokenCount": 42,
+        "candidatesTokenCount": 123,
+        "totalTokenCount": 165,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 42
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "respuesta_1": "Propondría cinco tablas principales: **Clientes**, **Productos**, **Pedidos**, **Detalle_Pedido** y **Pagos**. \nUn *Cliente* puede realizar muchos *Pedidos*, y un *Pedido* pertenece a un solo *Cliente*. \nUn *Pedido* contiene muchos *Productos* a través de la tabla intermedia *Detalle_Pedido* (relación muchos a muchos), la cual también almacena la cantidad y precio al momento de la compra. \nFinalmente, cada *Pedido* está asociado a uno o varios *Pagos* en una relación de uno a muchos.",
+      "respuesta_2": "Propondría 4 tablas principales: **Productos** (detalles y stock actual), **Proveedores**, **Ventas** (cabecera con fecha y total) y **Detalle_Ventas** (productos vendidos por ticket). Para los **precios**, almacenaría el precio de costo histórico y el precio de venta actual en la tabla *Productos*, asegurando flexibilidad ante cambios inflacionarios. Las **entradas** de mercadería se registrarían mediante una tabla de *Compras/Recepciones* vinculada a proveedores, sumando stock automáticamente, mientras que las **salidas** se descontarían en tiempo real registrando cada ítem en el *Detalle_Ventas* al concretarse la transacción."
+    },
+    "gemini-3.1-flash-lite": {
+      "latencias": [
+        7.079717100015841,
+        4.403887499996927,
+        4.82580659998348,
+        16.60891099998844
+      ],
+      "latencia_promedio": 8.229580549996172,
+      "costo_promedio": 0.00011475,
+      "uso": {
+        "promptTokenCount": 42,
+        "candidatesTokenCount": 69,
+        "totalTokenCount": 111,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 42
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "respuesta_1": "Propongo las tablas **Clientes**, **Productos**, **Pedidos** y **Detalle_Pedidos**. Los clientes realizan múltiples pedidos (1:N), mientras que los pedidos contienen varios productos a través de una tabla intermedia (Detalle_Pedidos) que gestiona la relación muchos a muchos (N:M) y registra cantidades y precios individuales.",
+      "respuesta_2": "Propondría tablas de **Productos**, **Ventas** (cabecera), **DetalleVentas** y **MovimientosInventario**. Los precios se manejarían con un campo en \"Productos\" para el actual y otro en \"DetalleVentas\" para congelar el valor al momento de la transacción. Las entradas y salidas se registrarían en \"MovimientosInventario\" mediante una columna de tipo (ingreso/egreso) y un ID de referencia, afectando el stock de forma centralizada al insertar cada registro."
+    }
+  },
+  {
+    "gemini-3.5-flash-lite": {
+      "latencias": [
+        4.845999200013466,
+        5.537800900026923,
+        4.813647000002675,
+        5.104126999998698
+      ],
+      "latencia_promedio": 5.0753935250104405,
+      "costo_promedio": 0.000270725,
+      "uso": {
+        "promptTokenCount": 42,
+        "candidatesTokenCount": 93,
+        "totalTokenCount": 135,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 42
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "respuesta_1": "Propondría cinco tablas principales: **Clientes**, **Productos**, **Pedidos**, **Detalle_Pedidos** y **Categorías**. La tabla *Categorías* clasifica a los *Productos*, los cuales se relacionan con los *Pedidos* a través de *Detalle_Pedidos* (relación muchos a muchos). Finalmente, la tabla *Clientes* se relaciona con *Pedidos* (uno a muchos) para registrar qué usuario realizó cada compra.",
+      "respuesta_2": "Propondría cuatro tablas principales: `Productos`, `Inventario`, `Ventas` y `Detalle_Ventas`. El precio de venta se almacenaría en `Productos`, pero para evitar alteraciones históricas si este cambia, se duplicaría el precio unitario en el `Detalle_Ventas` al momento de la transacción. Las entradas y salidas de mercadería (compras, ventas, mermas) se registrarían en una tabla llamada `Movimientos_Inventario`, la cual actualizaría en tiempo real el stock actual mediante disparadores (*triggers*) o lógica transaccional en el sistema."
+    },
+    "gemini-3.1-flash-lite": {
+      "latencias": [
+        3.994988000020385,
+        3.6972498999966774,
+        4.250782999995863,
+        2.454812799987849
+      ],
+      "latencia_promedio": 3.5994584250001935,
+      "costo_promedio": 0.00013125000000000002,
+      "uso": {
+        "promptTokenCount": 42,
+        "candidatesTokenCount": 74,
+        "totalTokenCount": 116,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 42
+          }
+        ],
+        "serviceTier": "standard"
+      },
+      "respuesta_1": "Propongo las tablas **Clientes**, **Productos**, **Pedidos** y **Detalle_Pedidos**. **Clientes** y **Productos** se relacionan con **Pedidos** (un cliente hace varios pedidos, un pedido contiene varios productos), mientras que **Detalle_Pedidos** actúa como tabla intermedia para gestionar la relación muchos a muchos entre **Pedidos** y **Productos**.",
+      "respuesta_2": "Propondría tablas de **Productos** (datos base), **Inventario** (stock actual), **Ventas** (encabezado) y **Detalle_Ventas**. El precio se registra en el catálogo de productos, pero se copia al `Detalle_Ventas` para congelar el valor histórico ante cambios futuros. Las entradas se gestionan mediante una tabla de **Compras/Ingresos**, mientras que las salidas se registran automáticamente en el `Detalle_Ventas`, restando la cantidad del stock en tiempo real mediante un disparador (*trigger*) o transacción."
+    }
+  }
+]
