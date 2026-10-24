@@ -6,15 +6,15 @@ load_dotenv()
 
 #Constantes
 API_KEY = os.getenv("API_KEY")
-MODELO = "gemini-3.5-flash-lite"
+MODELO = "gemini-3.1-flash-lite"
 URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
     
 
 
-def armar_peticion(prompt):
+def armar_peticion(prompt, modelo=MODELO):
     if not prompt:
         raise ValueError("La pregunta no puede estar vacía.")
-    url = f"{URL_BASE}{MODELO}:generateContent"
+    url = f"{URL_BASE}{modelo}:generateContent"
     headers = {"x-goog-api-key": API_KEY}
     body = {"contents": [{"parts": [{"text": prompt}]}]}
     return url, headers, body
