@@ -1,0 +1,14 @@
+{
+  "extraer_entidades": {
+    "exitos": 3,
+    "intentos": 3
+  },
+  "proponer_relaciones": {
+    "exitos": 3,
+    "intentos": 3
+  },
+  "clasificar_dominio": {
+    "exitos": 3,
+    "intentos": 3
+  }
+}
