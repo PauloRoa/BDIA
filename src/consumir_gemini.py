@@ -1,4 +1,6 @@
+import json
 import os
+import re
 import requests
 from dotenv import load_dotenv
 
@@ -8,15 +10,21 @@ load_dotenv()
 API_KEY = os.getenv("API_KEY")
 MODELO = "gemini-3.1-flash-lite"
 URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models/"
-    
 
 
-def armar_peticion(prompt, modelo=MODELO):
+def armar_peticion(prompt, modelo=MODELO, system_instruction=None, response_schema=None):
     if not prompt:
         raise ValueError("La pregunta no puede estar vacía.")
     url = f"{URL_BASE}{modelo}:generateContent"
     headers = {"x-goog-api-key": API_KEY}
     body = {"contents": [{"parts": [{"text": prompt}]}]}
+    if system_instruction is not None:
+        body["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+    if response_schema is not None:
+        body["generationConfig"] = {
+            "responseMimeType": "application/json",
+            "responseSchema": response_schema,
+        }
     return url, headers, body
 
 
@@ -39,6 +47,19 @@ def extraer_texto(respuesta_json):
         return respuesta_json["candidates"][0]["content"]["parts"][0]["text"]
     except (KeyError, IndexError) as error_dato:
         raise RuntimeError(f"La respuesta no trae el texto generado en el lugar esperado: {error_dato}")
+
+
+def parsear_respuesta_json(texto, claves_esperadas):
+    texto_limpio = texto.strip()
+    texto_limpio = re.sub(r"^```(?:json)?\s*", "", texto_limpio)
+    texto_limpio = re.sub(r"\s*```$", "", texto_limpio)
+    try:
+        datos = json.loads(texto_limpio)
+    except json.JSONDecodeError:
+        raise ValueError("La respuesta del modelo no es JSON válido.")
+    if not isinstance(datos, dict) or not all(clave in datos for clave in claves_esperadas):
+        raise ValueError("La respuesta no tiene la estructura esperada.")
+    return datos
 
 
 def calcular_costo(respuesta_json, precio_entrada, precio_salida):
