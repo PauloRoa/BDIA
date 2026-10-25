@@ -2,7 +2,7 @@
 
 Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene la habilitación técnica del Módulo 1: repositorio, entorno reproducible y un módulo Python que consume la API de Google Gemini, procesa la respuesta JSON, gestiona los errores previsibles y calcula el costo de cada petición. Incluye además la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
-**Estado actual:** Módulo 1 (Gate 1) completado.
+**Estado actual:** Módulo 1 / Gate 1 completado.
 
 ## Requisitos
 
