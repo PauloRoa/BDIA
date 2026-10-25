@@ -2,7 +2,7 @@
 
 Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene la habilitación técnica del Módulo 1: repositorio, entorno reproducible y un módulo Python que consume la API de Google Gemini, procesa la respuesta JSON, gestiona los errores previsibles y calcula el costo de cada petición. Incluye además la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
-**Estado actual:** Unidad U1.5 completada.
+**Estado actual:** Módulo 1 (Gate 1) completado.
 
 ## Requisitos
 
@@ -12,13 +12,20 @@ Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Acce
 
 ## Puesta en marcha
 
-1. Crear el entorno virtual:
+1. Clonar el repositorio y entrar a la carpeta:
+
+```
+git clone https://github.com/PauloRoa/BDIA.git
+cd BDIA
+```
+
+2. Crear el entorno virtual:
 
 ```
 python -m venv .venv
 ```
 
-2. Activarlo (cada terminal necesita su propia activación):
+3. Activarlo (cada terminal necesita su propia activación):
 
 Git Bash:
 
@@ -32,19 +39,19 @@ PowerShell:
 .\.venv\Scripts\Activate.ps1
 ```
 
-3. Instalar las dependencias:
+4. Instalar las dependencias:
 
 ```
 pip install -r requirements.txt
 ```
 
-4. Crear el archivo de variables de entorno a partir de la plantilla:
+5. Crear el archivo de variables de entorno a partir de la plantilla:
 
 ```
 cp .env.example .env
 ```
 
-5. Abrir `.env` y reemplazar el marcador por tu clave real en la variable `API_KEY`. El archivo `.env` está excluido en `.gitignore` y nunca se sube al repositorio.
+6. Abrir `.env` y reemplazar el marcador por tu clave real en la variable `API_KEY`. El archivo `.env` está excluido en `.gitignore` y nunca se sube al repositorio.
 
 ## Uso
 
@@ -111,7 +118,7 @@ La llamada final del módulo captura ambos tipos de excepción y muestra `No se 
 - `src/`: código fuente.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
 - `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`) y los datos de la comparación de modelos (`resultados_comparacion.json`).
-- `tests/`: pruebas.
+- `tests/`: reservada para pruebas automatizadas (aún sin contenido).
 - `requirements.txt`: dependencias de Python.
 - `.env.example`: plantilla de variables de entorno, sin valores reales.
 
@@ -119,3 +126,11 @@ La llamada final del módulo captura ambos tipos de excepción y muestra `No se 
 
 - Ningún secreto (clave de API, token) se escribe en el código ni en archivos versionados.
 - Las claves viven solo en `.env`.
+
+## Registro del ensayo de instalación limpia
+
+- Fecha: 2026-10-24
+- Alcance: clon desde GitHub en una carpeta nueva, con entorno virtual nuevo, en el mismo equipo de desarrollo.
+- Encontrado: el README no incluía el paso de clonado del repositorio; en el primer intento el entorno se creó como `venv` y no como `.venv`, que es lo que indica el README; la introducción del README tenía un error tipográfico ("yun").
+- Corregido: se agregó el paso de clonado, se repitió el ensayo con `.venv` siguiendo el README y se corrigió el error tipográfico.
+- Resultado tras la corrección: instalación y ejecución de `python src/consumir_gemini.py` sin intervención manual, con respuesta real del modelo y sin errores. `git status` quedó limpio, `.env` no está versionado y no aparece en el historial.
