@@ -33,6 +33,45 @@ Consideraciones sobre la medición:
 - La calidad se evaluó mediante un puntaje asignado por el autor a 6 respuestas por modelo (3 corridas por 2 preguntas), conforme a cuatro criterios: entidades, relaciones, aspectos específicos solicitados y extensión. La muestra es reducida y el evaluador es único, por lo que el empate no constituye un resultado preciso.
 - Las mediciones se realizaron con una versión previa de `src/comparar_modelos.py`, que repetía el proceso 3 veces. La versión incluida en el repositorio ejecuta una corrida de 4 repeticiones con la misma lógica de medición.
 
+### Medición de calidad
+
+La calidad se evaluó sobre dos preguntas representativas de la miniaplicación, definidas en `src/comparar_modelos.py`: la pregunta 1 trata de una pyme que vende ropa por internet, y la pregunta 2, de un almacén de barrio que une ventas e inventario. En cada corrida, la pregunta 1 se repitió cuatro veces para medir la latencia y se evaluó la respuesta de la última repetición; la pregunta 2 se planteó una vez. De este modo se evaluaron 6 respuestas por modelo, conservadas en `docs/resultados_comparacion.json`.
+
+Criterios de evaluación:
+
+| Criterio | Qué se revisa |
+|---|---|
+| Entidades | Propone las tablas que el caso necesita. |
+| Relaciones | Explica cómo se relacionan las tablas (cardinalidad, tabla intermedia). |
+| Aspectos específicos | Cubre lo que pide la pregunta. En la pregunta 2: manejo de precios y registro de entradas y salidas. |
+| Extensión | Respeta el máximo de líneas indicado. |
+
+Escala de puntaje:
+
+| Puntaje | Significado |
+|---|---|
+| 5 | Completamente alineado: cumple los cuatro criterios sin debilidades. |
+| 4 | Alineado con una debilidad menor. |
+| 3 | Parcialmente alineado: una debilidad afecta un criterio. |
+| 2 | Lejos de lo pedido: omite varios elementos. |
+| 1 | Muy lejos de lo pedido. |
+
+Puntajes asignados:
+
+| Modelo | Pregunta | Corrida 1 | Corrida 2 | Corrida 3 | Promedio |
+|---|---|---|---|---|---|
+| gemini-3.5-flash-lite | 1 | 5 | 5 | 5 | 5,0 |
+| gemini-3.5-flash-lite | 2 | 5 | 3 | 4 | 4,0 |
+| gemini-3.1-flash-lite | 1 | 5 | 5 | 4 | 4,7 |
+| gemini-3.1-flash-lite | 2 | 4 | 5 | 4 | 4,3 |
+
+Observaciones que explican los puntajes menores a 5:
+
+- 3.5, pregunta 2, corrida 2 (3): anuncia 4 tablas y agrega una quinta, y no congela el precio de venta en el detalle de la venta.
+- 3.5, pregunta 2, corrida 3 (4): anuncia 4 tablas y agrega `Movimientos_Inventario`.
+- 3.1, pregunta 1, corrida 3 (4): indica que Productos se relaciona directamente con Pedidos, cuando lo hace a través del detalle.
+- 3.1, pregunta 2, corridas 1 y 3 (4): la tabla de movimientos o de compras no figura en la lista inicial de tablas.
+
 ## Justificación
 
 Los criterios se ordenan desde el que mayor peso tuvo en la decisión hasta el que tuvo menor peso:
