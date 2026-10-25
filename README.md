@@ -131,6 +131,6 @@ La llamada final del módulo captura ambos tipos de excepción y muestra `No se 
 
 - Fecha: 2026-10-24
 - Alcance: clon desde GitHub en una carpeta nueva, con entorno virtual nuevo, en el mismo equipo de desarrollo.
-- Encontrado: el README no incluía el paso de clonado del repositorio; en el primer intento el entorno se creó como `venv` y no como `.venv`, que es lo que indica el README; la introducción del README tenía un error tipográfico ("yun").
-- Corregido: se agregó el paso de clonado, se repitió el ensayo con `.venv` siguiendo el README y se corrigió el error tipográfico.
+- Encontrado: el README no incluía el paso de clonado del repositorio.
+- Corregido: se agregó el paso de clonado al README y se confirmó que el resto de los pasos funciona siguiendo solo sus instrucciones.
 - Resultado tras la corrección: instalación y ejecución de `python src/consumir_gemini.py` sin intervención manual, con respuesta real del modelo y sin errores. `git status` quedó limpio, `.env` no está versionado y no aparece en el historial.
