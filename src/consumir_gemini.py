@@ -32,13 +32,21 @@ def enviar_peticion(url, headers, body):
     try:
         respuesta = requests.post(url, headers=headers, json=body, timeout=60)
     except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as error_conexion:
-        raise RuntimeError(f"No se pudo conectar con el servicio o se agotó el tiempo de espera: {error_conexion}")
+        raise TimeoutError(f"No se pudo contactar al proveedor. Puede ser momentáneo: {error_conexion}")
+    if respuesta.status_code in (401, 403):
+        raise ValueError("Credencial inválida o sin permiso. Revisa tu API_KEY.")
+    if respuesta.status_code == 429 or respuesta.status_code >= 500:
+        raise TimeoutError(f"El proveedor no pudo procesar la petición (HTTP {respuesta.status_code}). Hay que esperar y reintentar.")
     try:
         respuesta_json = respuesta.json()
     except requests.exceptions.JSONDecodeError as error_formato:
         raise RuntimeError(f"La respuesta del servicio no llegó en el formato esperado: {error_formato}")
     if "error" in respuesta_json:
-        raise RuntimeError(f"El servicio rechazó la petición: {respuesta_json['error']['message']}")
+        error_servicio = respuesta_json["error"]
+        motivos = [detalle.get("reason") for detalle in error_servicio.get("details", [])]
+        if "API_KEY_INVALID" in motivos:
+            raise ValueError("Credencial inválida o sin permiso. Revisa tu API_KEY.")
+        raise RuntimeError(f"El servicio rechazó la petición (HTTP {respuesta.status_code}): {error_servicio.get('message', error_servicio)}")
     return respuesta_json
 
 
@@ -81,5 +89,5 @@ def generar_respuesta(prompt):
 if __name__ == "__main__":
     try:
         print(generar_respuesta("Confirma que esta conexión vía API funciona correctamente, tu respuesta es la confirmación."))
-    except (ValueError, RuntimeError) as error:
+    except (ValueError, RuntimeError, TimeoutError) as error:
         print(f"No se pudo generar la respuesta: {error}")
