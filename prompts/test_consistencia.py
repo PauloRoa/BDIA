@@ -28,7 +28,7 @@ for prompt in BANCO_DE_PROMPTS:
             texto = extraer_texto(respuesta)
             parsear_respuesta_json(texto, prompt["claves_esperadas"])
             exitos += 1
-        except (ValueError, RuntimeError) as error:
+        except (ValueError, RuntimeError, TimeoutError) as error:
             print(f"  intento {intento + 1} falló: {error}")
         time.sleep(PAUSA_ENTRE_LLAMADAS)
     print(f"{prompt['nombre']}: {exitos}/{INTENTOS} respuestas válidas")

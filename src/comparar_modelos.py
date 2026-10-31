@@ -64,7 +64,7 @@ if __name__ == "__main__":
     for modelo, precios in MODELOS.items():
         try:
             resultado = medir_modelo(modelo, precios)
-        except (ValueError, RuntimeError) as error:
+        except (ValueError, RuntimeError, TimeoutError) as error:
             print(f"No se pudo medir {modelo}: {error}")
             continue
         mostrar_resultado(modelo, resultado)

@@ -2,7 +2,9 @@
 
 Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene la habilitación técnica del Módulo 1: repositorio, entorno reproducible y un módulo Python que consume la API de Google Gemini, procesa la respuesta JSON, gestiona los errores previsibles y calcula el costo de cada petición. Incluye además la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
-**Estado actual:** Módulo 1 / Gate 1 completado.
+Desde el Módulo 2 incorpora un cliente modular (`src/cliente.py`) que clasifica los errores del proveedor y reintenta automáticamente los que son momentáneos.
+
+**Estado actual:** Módulo 1 / Gate 1 completado. Módulo 2 en curso.
 
 ## Requisitos
 
@@ -58,10 +60,16 @@ cp .env.example .env
 Con el entorno activo, desde la raíz del repositorio:
 
 ```
+python src/cliente.py
+```
+
+Envía una pregunta fija al modelo a través de `consultar_modelo`, el punto de entrada del cliente modular, y muestra el texto generado. Si el proveedor falla de forma momentánea, el cliente reintenta automáticamente. La respuesta varía en cada ejecución, porque proviene de un modelo generativo. Para cambiar la pregunta, se edita la llamada final del archivo.
+
+```
 python src/consumir_gemini.py
 ```
 
-El módulo envía una pregunta fija al modelo `gemini-3.1-flash-lite` (constante `MODELO`) y muestra por pantalla el texto generado. La respuesta varía en cada ejecución, porque proviene de un modelo generativo. Para cambiar la pregunta, se edita la llamada final del archivo.
+Envía una pregunta fija al modelo `gemini-3.1-flash-lite` (constante `MODELO`) directamente, sin reintentos, y muestra el texto generado.
 
 Scripts complementarios, que se ejecutan de la misma forma:
 
@@ -83,6 +91,28 @@ python prompts/test_consistencia.py
 
 Ejecuta tres veces cada prompt del banco (`prompts/banco.py`), valida que la respuesta sea un JSON con las claves esperadas y guarda el resultado en `prompts/registro_resultados.json`. Realiza 9 peticiones por ejecución.
 
+## Cliente `src/cliente.py`
+
+Interfaz pública para consultar el modelo. Usa las funciones de `src/consumir_gemini.py` y agrega el reintento, de modo que quien lo usa no necesita conocer el orden de las llamadas ni cómo se manejan los errores por dentro.
+
+| Función | Responsabilidad |
+|---|---|
+| `consultar_modelo(pregunta, system_instruction)` | Punto de entrada único: arma la petición, la envía con reintento y devuelve el texto generado. `system_instruction` es opcional. Si se agotan los reintentos, lanza `RuntimeError` con un mensaje para quien usa el cliente. |
+| `con_reintento(funcion, intentos, espera_segundos)` | Ejecuta una función sin argumentos y, si lanza `TimeoutError`, espera y la vuelve a intentar (por defecto, 3 intentos con 2 segundos de espera). En el último intento deja pasar el error. Cualquier otra excepción se propaga sin reintentar. |
+
+Ejemplo de uso desde otro archivo de `src/`:
+
+```python
+from cliente import consultar_modelo
+
+try:
+    print(consultar_modelo("¿Cuál es la capital de Chile?"))
+except ValueError as error:
+    print(f"Error de configuración: {error}")
+except RuntimeError as error:
+    print(f"El servicio no respondió tras varios intentos: {error}")
+```
+
 ## Módulo `src/consumir_gemini.py`
 
 Cada función tiene una única responsabilidad:
@@ -90,28 +120,35 @@ Cada función tiene una única responsabilidad:
 | Función | Responsabilidad |
 |---|---|
 | `armar_peticion(prompt, modelo, system_instruction, response_schema)` | Valida la pregunta y arma la URL (según el modelo indicado, por defecto `MODELO`), los encabezados (la clave viaja en `x-goog-api-key`) y el cuerpo de la petición. Si se indica `system_instruction`, la agrega como `systemInstruction`, separada de la pregunta. Si se indica `response_schema`, agrega `generationConfig` para que la respuesta sea un JSON con esa estructura. Ambos parámetros son opcionales. |
-| `enviar_peticion(url, headers, body)` | Envía la petición (con un tiempo de espera de 60 segundos) y devuelve la respuesta convertida desde JSON. |
+| `enviar_peticion(url, headers, body)` | Envía la petición (con un tiempo de espera de 60 segundos), clasifica las fallas según si conviene reintentar y devuelve la respuesta convertida desde JSON. |
 | `extraer_texto(respuesta_json)` | Navega la respuesta hasta el texto generado. |
 | `parsear_respuesta_json(texto, claves_esperadas)` | Quita las marcas de markdown del texto, lo convierte desde JSON y comprueba que sea un objeto con las claves esperadas. |
 | `calcular_costo(respuesta_json, precio_entrada, precio_salida)` | Calcula el costo en dólares de una petición a partir de `usageMetadata`: los tokens de entrada y de salida, multiplicados por su precio por token. |
-| `generar_respuesta(prompt)` | Función principal: llama a `armar_peticion`, `enviar_peticion` y `extraer_texto` en orden. |
+| `generar_respuesta(prompt)` | Llama a `armar_peticion`, `enviar_peticion` y `extraer_texto` en orden, sin reintentos. |
 
 ## Manejo de errores
 
-Cada falla se captura en la función a la que corresponde y se informa con un mensaje que indica qué ocurrió. Quien llama a `generar_respuesta` recibe `ValueError` o `RuntimeError`, y el programa no se detiene sin control.
+Cada falla se captura en la función a la que corresponde y se informa con un mensaje que indica qué ocurrió. El tipo de excepción indica qué hacer con ella:
 
-| Falla | Dónde se maneja | Mensaje |
-|---|---|---|
-| Pregunta vacía | `armar_peticion` | `La pregunta no puede estar vacía.` |
-| Servicio sin conexión o tiempo de espera agotado | `enviar_peticion` | `No se pudo conectar con el servicio o se agotó el tiempo de espera: …` |
-| Respuesta del servicio que no es JSON válido | `enviar_peticion` | `La respuesta del servicio no llegó en el formato esperado: …` |
-| Error informado por el servicio (clave inválida, alta demanda, cuota excedida) | `enviar_peticion` | `El servicio rechazó la petición: …` (con el mensaje del servicio) |
-| Texto ausente en la respuesta | `extraer_texto` | `La respuesta no trae el texto generado en el lugar esperado: …` |
-| Texto del modelo que no es JSON válido | `parsear_respuesta_json` | `La respuesta del modelo no es JSON válido.` |
-| JSON sin la estructura esperada | `parsear_respuesta_json` | `La respuesta no tiene la estructura esperada.` |
-| Conteo de tokens ausente en la respuesta | `calcular_costo` | `La respuesta no trae el conteo de tokens en el lugar esperado: …` |
+- `ValueError`: problema de entrada o de configuración. Reintentar no lo soluciona; hay que corregirlo.
+- `TimeoutError`: falla momentánea del proveedor o de la red. Reintentar después de esperar suele resolverla.
+- `RuntimeError`: respuesta inesperada del servicio o reintentos agotados.
 
-La llamada final del módulo captura ambos tipos de excepción y muestra `No se pudo generar la respuesta: <mensaje>`.
+| Falla | Dónde se maneja | Excepción | Mensaje |
+|---|---|---|---|
+| Pregunta vacía | `armar_peticion` | `ValueError` | `La pregunta no puede estar vacía.` |
+| Servicio sin conexión o tiempo de espera agotado | `enviar_peticion` | `TimeoutError` | `No se pudo contactar al proveedor. Puede ser momentáneo: …` |
+| Credencial inválida o sin permiso (HTTP 401 o 403, o HTTP 400 con motivo `API_KEY_INVALID`, que es lo que informa Gemini) | `enviar_peticion` | `ValueError` | `Credencial inválida o sin permiso. Revisa tu API_KEY.` |
+| Límite de uso excedido (HTTP 429) o falla del proveedor (HTTP 500 o superior) | `enviar_peticion` | `TimeoutError` | `El proveedor no pudo procesar la petición (HTTP …). Hay que esperar y reintentar.` |
+| Respuesta del servicio que no es JSON válido | `enviar_peticion` | `RuntimeError` | `La respuesta del servicio no llegó en el formato esperado: …` |
+| Otro error informado por el servicio | `enviar_peticion` | `RuntimeError` | `El servicio rechazó la petición (HTTP …): …` (con el mensaje del servicio) |
+| Texto ausente en la respuesta | `extraer_texto` | `RuntimeError` | `La respuesta no trae el texto generado en el lugar esperado: …` |
+| Texto del modelo que no es JSON válido | `parsear_respuesta_json` | `ValueError` | `La respuesta del modelo no es JSON válido.` |
+| JSON sin la estructura esperada | `parsear_respuesta_json` | `ValueError` | `La respuesta no tiene la estructura esperada.` |
+| Conteo de tokens ausente en la respuesta | `calcular_costo` | `RuntimeError` | `La respuesta no trae el conteo de tokens en el lugar esperado: …` |
+| Reintentos agotados | `consultar_modelo` | `RuntimeError` | `El servicio no respondió tras varios intentos. Intenta más tarde.` |
+
+La llamada final de `consumir_gemini.py` captura los tres tipos de excepción y muestra `No se pudo generar la respuesta: <mensaje>`. La de `cliente.py` captura `ValueError` y `RuntimeError`, porque `consultar_modelo` ya convierte el `TimeoutError` final en `RuntimeError`.
 
 ## Estructura del repositorio
 

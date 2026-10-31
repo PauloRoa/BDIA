@@ -14,7 +14,7 @@ try:
     costo_entrada = calcular_costo(respuesta_json, PRECIO_ENTRADA, 0)
     costo_salida = calcular_costo(respuesta_json, 0, PRECIO_SALIDA)
     uso = respuesta_json["usageMetadata"]
-except (ValueError, RuntimeError) as error:
+except (ValueError, RuntimeError, TimeoutError) as error:
     print(f"No se pudo calcular el uso de tokens: {error}")
 else:
     print(f"Respuesta: {texto}")
