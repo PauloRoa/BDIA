@@ -1,10 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene la habilitación técnica del Módulo 1: repositorio, entorno reproducible y un módulo Python que consume la API de Google Gemini, procesa la respuesta JSON, gestiona los errores previsibles y calcula el costo de cada petición. Incluye además la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
-
-Desde el Módulo 2 incorpora un cliente modular (`src/cliente.py`) que clasifica los errores del proveedor y reintenta automáticamente los que son momentáneos.
-
-**Estado actual:** Módulo 1 / Gate 1 completado. Módulo 2 en curso.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Requisitos
 
@@ -63,7 +59,7 @@ Con el entorno activo, desde la raíz del repositorio:
 python src/cliente.py
 ```
 
-Envía una pregunta fija al modelo a través de `consultar_modelo`, el punto de entrada del cliente modular, y muestra el texto generado. Si el proveedor falla de forma momentánea, el cliente reintenta automáticamente. La respuesta varía en cada ejecución, porque proviene de un modelo generativo. Para cambiar la pregunta, se edita la llamada final del archivo.
+Envía una pregunta fija al modelo a través de `consultar_modelo`, el punto de entrada del cliente, y muestra el costo de la operación y el texto generado. Si el proveedor falla de forma momentánea, el cliente reintenta automáticamente. La respuesta varía en cada ejecución, porque proviene de un modelo generativo. Para cambiar la pregunta, se edita la llamada final del archivo.
 
 ```
 python src/consumir_gemini.py
@@ -93,12 +89,13 @@ Ejecuta tres veces cada prompt del banco (`prompts/banco.py`), valida que la res
 
 ## Cliente `src/cliente.py`
 
-Interfaz pública para consultar el modelo. Usa las funciones de `src/consumir_gemini.py` y agrega el reintento, de modo que quien lo usa no necesita conocer el orden de las llamadas ni cómo se manejan los errores por dentro.
+Interfaz pública para consultar el modelo. Usa las funciones de `src/consumir_gemini.py` y agrega el reintento y el registro de costo, de modo que quien lo usa no necesita conocer el orden de las llamadas ni cómo se manejan los errores por dentro. El costo se calcula con los precios de `gemini-3.1-flash-lite` (constantes `PRECIO_ENTRADA` y `PRECIO_SALIDA`) y se acumula en `costo_total_sesion`, que vuelve a cero en cada ejecución.
 
 | Función | Responsabilidad |
 |---|---|
-| `consultar_modelo(pregunta, system_instruction)` | Punto de entrada único: arma la petición, la envía con reintento y devuelve el texto generado. `system_instruction` es opcional. Si se agotan los reintentos, lanza `RuntimeError` con un mensaje para quien usa el cliente. |
-| `con_reintento(funcion, intentos, espera_segundos)` | Ejecuta una función sin argumentos y, si lanza `TimeoutError`, espera y la vuelve a intentar (por defecto, 3 intentos con 2 segundos de espera). En el último intento deja pasar el error. Cualquier otra excepción se propaga sin reintentar. |
+| `consultar_modelo(pregunta, system_instruction)` | Punto de entrada único: arma la petición, la envía con reintento, registra su costo y devuelve el texto generado. `system_instruction` es opcional. Si se agotan los reintentos, lanza `RuntimeError` con un mensaje para quien usa el cliente. |
+| `con_reintento(funcion, intentos, espera_base, espera_maxima)` | Ejecuta una función sin argumentos y, si lanza `TimeoutError`, muestra el motivo, espera y la vuelve a intentar. La espera se duplica en cada intento a partir de `espera_base` (backoff exponencial), nunca supera `espera_maxima` y suma hasta un 10 % aleatorio (jitter). Por defecto: 3 intentos, base de 2 segundos y máximo de 30, es decir, esperas de 2 y 4 segundos. En el último intento deja pasar el error. Cualquier otra excepción se propaga sin reintentar. |
+| `registrar_costo(respuesta)` | Calcula el costo de una operación exitosa con `calcular_costo`, lo suma a `costo_total_sesion`, muestra los tokens, el costo de la operación y el acumulado, y lo devuelve. Si la respuesta no trae el conteo de tokens, avisa y registra 0, sin impedir que se entregue la respuesta. |
 
 Ejemplo de uso desde otro archivo de `src/`:
 
@@ -154,7 +151,7 @@ La llamada final de `consumir_gemini.py` captura los tres tipos de excepción y 
 
 - `src/`: código fuente.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
-- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`) y los datos de la comparación de modelos (`resultados_comparacion.json`).
+- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`) y el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`).
 - `tests/`: reservada para pruebas automatizadas (aún sin contenido).
 - `requirements.txt`: dependencias de Python.
 - `.env.example`: plantilla de variables de entorno, sin valores reales.
@@ -163,11 +160,3 @@ La llamada final de `consumir_gemini.py` captura los tres tipos de excepción y 
 
 - Ningún secreto (clave de API, token) se escribe en el código ni en archivos versionados.
 - Las claves viven solo en `.env`.
-
-## Registro del ensayo de instalación limpia
-
-- Fecha: 2026-10-24
-- Alcance: clon desde GitHub en una carpeta nueva, con entorno virtual nuevo, en el mismo equipo de desarrollo.
-- Encontrado: el README no incluía el paso de clonado del repositorio.
-- Corregido: se agregó el paso de clonado al README y se confirmó que el resto de los pasos funciona siguiendo solo sus instrucciones.
-- Resultado tras la corrección: instalación y ejecución de `python src/consumir_gemini.py` sin intervención manual, con respuesta real del modelo y sin errores. `git status` quedó limpio, `.env` no está versionado y no aparece en el historial.
