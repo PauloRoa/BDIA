@@ -1,6 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un pipeline de limpieza y tokenización de texto para comparar las respuestas del modelo con referencias propias, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Requisitos
 
@@ -70,6 +70,12 @@ Envía una pregunta fija al modelo `gemini-3.1-flash-lite` (constante `MODELO`) 
 Scripts complementarios, que se ejecutan de la misma forma:
 
 ```
+python src/pipeline_texto.py
+```
+
+Envía tres preguntas de modelado de datos al modelo a través del cliente, compara cada respuesta con una referencia propia por coincidencia de palabras, sobre texto crudo y sobre texto procesado, y guarda el resultado en `docs/registro_pipeline_texto.md`. Realiza 3 peticiones por ejecución.
+
+```
 python src/contar_tokens.py
 ```
 
@@ -89,10 +95,10 @@ Ejecuta tres veces cada prompt del banco (`prompts/banco.py`), valida que la res
 
 ## Pruebas
 
-Las pruebas unitarias del cliente están en `tests/test_cliente.py`. Simulan la API y las esperas con mocks, por lo que no consumen tokens ni requieren conexión. Con el entorno activo, desde la raíz del repositorio:
+Las pruebas unitarias están en `tests/`: `test_cliente.py` cubre el cliente y `test_pipeline_texto.py`, el pipeline de texto. Las del cliente simulan la API y las esperas con mocks, por lo que ninguna prueba consume tokens ni requiere conexión. Con el entorno activo, desde la raíz del repositorio:
 
 ```
-pytest tests/test_cliente.py -v
+pytest tests/ -v
 ```
 
 ## Cliente `src/cliente.py`
@@ -117,6 +123,19 @@ except ValueError as error:
 except RuntimeError as error:
     print(f"El servicio no respondió tras varios intentos: {error}")
 ```
+
+## Pipeline de texto `src/pipeline_texto.py`
+
+Normaliza el texto antes de compararlo, para que las diferencias de formato (mayúsculas, puntuación, espacios) no distorsionen la métrica.
+
+| Función | Responsabilidad |
+|---|---|
+| `limpiar_texto(texto)` | Pasa el texto a minúsculas y quita la puntuación y los espacios repetidos. Si recibe algo que no es texto, lanza `TypeError`. |
+| `tokenizar(texto_limpio)` | Separa el texto limpio en una lista de palabras. |
+| `procesar_texto(texto)` | Limpia y tokeniza el texto en un solo paso. |
+| `calcular_coincidencia(tokens_referencia, tokens_respuesta)` | Devuelve la proporción de palabras distintas de la referencia que también aparecen en la respuesta. Si la referencia no tiene palabras, devuelve 0. |
+
+La coincidencia por palabras no considera el orden ni las repeticiones, ni evalúa el significado: dos oraciones con las mismas palabras y sentido opuesto coinciden al 100 %.
 
 ## Módulo `src/consumir_gemini.py`
 
@@ -152,6 +171,7 @@ Cada falla se captura en la función a la que corresponde y se informa con un me
 | JSON sin la estructura esperada | `parsear_respuesta_json` | `ValueError` | `La respuesta no tiene la estructura esperada.` |
 | Conteo de tokens ausente en la respuesta | `calcular_costo` | `RuntimeError` | `La respuesta no trae el conteo de tokens en el lugar esperado: …` |
 | Reintentos agotados | `consultar_modelo` | `RuntimeError` | `El servicio no respondió tras varios intentos. Intenta más tarde.` |
+| Entrada que no es texto | `limpiar_texto` | `TypeError` | `limpiar_texto espera str, no …` |
 
 La llamada final de `consumir_gemini.py` captura los tres tipos de excepción y muestra `No se pudo generar la respuesta: <mensaje>`. La de `cliente.py` captura `ValueError` y `RuntimeError`, porque `consultar_modelo` ya convierte el `TimeoutError` final en `RuntimeError`.
 
@@ -159,8 +179,8 @@ La llamada final de `consumir_gemini.py` captura los tres tipos de excepción y 
 
 - `src/`: código fuente.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
-- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`) y el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`).
-- `tests/`: pruebas unitarias del cliente (`test_cliente.py`).
+- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`) y el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`).
+- `tests/`: pruebas unitarias del cliente (`test_cliente.py`) y del pipeline de texto (`test_pipeline_texto.py`).
 - `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos.
 - `requirements.txt`: dependencias de Python.
 - `.env.example`: plantilla de variables de entorno, sin valores reales.
