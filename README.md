@@ -87,6 +87,14 @@ python prompts/test_consistencia.py
 
 Ejecuta tres veces cada prompt del banco (`prompts/banco.py`), valida que la respuesta sea un JSON con las claves esperadas y guarda el resultado en `prompts/registro_resultados.json`. Realiza 9 peticiones por ejecución.
 
+## Pruebas
+
+Las pruebas unitarias del cliente están en `tests/test_cliente.py`. Simulan la API y las esperas con mocks, por lo que no consumen tokens ni requieren conexión. Con el entorno activo, desde la raíz del repositorio:
+
+```
+pytest tests/test_cliente.py -v
+```
+
 ## Cliente `src/cliente.py`
 
 Interfaz pública para consultar el modelo. Usa las funciones de `src/consumir_gemini.py` y agrega el reintento y el registro de costo, de modo que quien lo usa no necesita conocer el orden de las llamadas ni cómo se manejan los errores por dentro. El costo se calcula con los precios de `gemini-3.1-flash-lite` (constantes `PRECIO_ENTRADA` y `PRECIO_SALIDA`) y se acumula en `costo_total_sesion`, que vuelve a cero en cada ejecución.
@@ -152,7 +160,8 @@ La llamada final de `consumir_gemini.py` captura los tres tipos de excepción y 
 - `src/`: código fuente.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
 - `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`) y el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`).
-- `tests/`: reservada para pruebas automatizadas (aún sin contenido).
+- `tests/`: pruebas unitarias del cliente (`test_cliente.py`).
+- `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos.
 - `requirements.txt`: dependencias de Python.
 - `.env.example`: plantilla de variables de entorno, sin valores reales.
 
