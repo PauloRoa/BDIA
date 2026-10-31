@@ -1,6 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un pipeline de limpieza y tokenización de texto para comparar las respuestas del modelo con referencias propias, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Requisitos
 
@@ -70,10 +70,16 @@ Envía una pregunta fija al modelo `gemini-3.1-flash-lite` (constante `MODELO`) 
 Scripts complementarios, que se ejecutan de la misma forma:
 
 ```
+python src/evaluar_salidas.py
+```
+
+Envía tres preguntas de modelado de datos al modelo a través del cliente, calcula la precisión, la cobertura y el F1 de cada respuesta frente a una referencia propia, y guarda consulta, referencia, respuesta y métricas en `docs/resultados_metricas.json`. Muestra además los promedios y los casos ordenados por F1, del peor al mejor. Realiza 3 peticiones por ejecución.
+
+```
 python src/pipeline_texto.py
 ```
 
-Envía tres preguntas de modelado de datos al modelo a través del cliente, compara cada respuesta con una referencia propia por coincidencia de palabras, sobre texto crudo y sobre texto procesado, y guarda el resultado en `docs/registro_pipeline_texto.md`. Realiza 3 peticiones por ejecución.
+Envía las mismas tres preguntas, compara cada respuesta con su referencia por coincidencia de palabras, sobre texto crudo y sobre texto procesado, y guarda el resultado en `docs/registro_pipeline_texto.md`. Realiza 3 peticiones por ejecución.
 
 ```
 python src/contar_tokens.py
@@ -126,7 +132,7 @@ except RuntimeError as error:
 
 ## Pipeline de texto `src/pipeline_texto.py`
 
-Normaliza el texto antes de compararlo, para que las diferencias de formato (mayúsculas, puntuación, espacios) no distorsionen la métrica.
+Normaliza el texto antes de compararlo, para que las diferencias de formato (mayúsculas, puntuación, espacios) no distorsionen las métricas, y calcula las métricas de comparación entre una referencia y una respuesta.
 
 | Función | Responsabilidad |
 |---|---|
@@ -134,8 +140,12 @@ Normaliza el texto antes de compararlo, para que las diferencias de formato (may
 | `tokenizar(texto_limpio)` | Separa el texto limpio en una lista de palabras. |
 | `procesar_texto(texto)` | Limpia y tokeniza el texto en un solo paso. |
 | `calcular_coincidencia(tokens_referencia, tokens_respuesta)` | Devuelve la proporción de palabras distintas de la referencia que también aparecen en la respuesta. Si la referencia no tiene palabras, devuelve 0. |
+| `contar_coincidencias(tokens_referencia, tokens_respuesta)` | Cuenta las palabras en común, respetando las repeticiones: cada palabra coincide como máximo tantas veces como aparece en ambos lados. |
+| `calcular_precision_cobertura_f1(tokens_referencia, tokens_respuesta)` | Calcula la precisión (coincidencias sobre el total de la respuesta), la cobertura (coincidencias sobre el total de la referencia) y el F1, que combina ambas. Si alguna lista está vacía, devuelve 0 en las tres. |
+| `calcular_metricas(texto_referencia, texto_respuesta)` | Procesa ambos textos y calcula la precisión, la cobertura y el F1 en un solo paso. |
+| `resumir_metricas(resultados)` | Promedia la precisión, la cobertura y el F1 de una lista de resultados. |
 
-La coincidencia por palabras no considera el orden ni las repeticiones, ni evalúa el significado: dos oraciones con las mismas palabras y sentido opuesto coinciden al 100 %.
+Estas métricas miden la elección de palabras, no si la respuesta es correcta: no consideran el orden ni el significado, penalizan los sinónimos y apenas cambian si falta una negación o cambia un dato concreto, como una fecha o una cifra.
 
 ## Módulo `src/consumir_gemini.py`
 
@@ -179,7 +189,7 @@ La llamada final de `consumir_gemini.py` captura los tres tipos de excepción y 
 
 - `src/`: código fuente.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
-- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`) y el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`).
+- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`) y las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`).
 - `tests/`: pruebas unitarias del cliente (`test_cliente.py`) y del pipeline de texto (`test_pipeline_texto.py`).
 - `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos.
 - `requirements.txt`: dependencias de Python.
