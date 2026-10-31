@@ -1,0 +1,26 @@
+[
+  {
+    "consulta": "¿Qué es una clave primaria en una base de datos relacional?",
+    "referencia": "Una clave primaria es una columna o conjunto de columnas que identifica de forma única cada fila de una tabla.",
+    "respuesta": "Una clave primaria es un campo o conjunto de campos que identifica de manera única e irrepetible cada registro dentro de una tabla en una base de datos relacional.",
+    "precision": 0.552,
+    "cobertura": 0.8,
+    "f1": 0.653
+  },
+  {
+    "consulta": "¿Qué es una clave foránea en una base de datos relacional?",
+    "referencia": "Una clave foránea es una columna que referencia la clave primaria de otra tabla para relacionar ambas tablas.",
+    "respuesta": "Una clave foránea es un campo o conjunto de campos en una tabla que establece un vínculo lógico con la clave primaria de otra tabla, garantizando así la integridad referencial entre ambas.",
+    "precision": 0.406,
+    "cobertura": 0.722,
+    "f1": 0.52
+  },
+  {
+    "consulta": "¿Qué es la normalización de una base de datos relacional?",
+    "referencia": "La normalización es el proceso de organizar las tablas de una base de datos para reducir la redundancia y evitar anomalías al modificar los datos.",
+    "respuesta": "La normalización es el proceso de organizar los datos en una base de datos relacional para reducir la redundancia y mejorar la integridad mediante la aplicación de reglas que dividen las tablas en estructuras más eficientes.",
+    "precision": 0.583,
+    "cobertura": 0.84,
+    "f1": 0.689
+  }
+]
