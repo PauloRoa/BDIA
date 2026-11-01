@@ -1,26 +1,182 @@
 [
   {
+    "caso": 1,
     "consulta": "¿Qué es una clave primaria en una base de datos relacional?",
     "referencia": "Una clave primaria es una columna o conjunto de columnas que identifica de forma única cada fila de una tabla.",
-    "respuesta": "Una clave primaria es un campo o conjunto de campos que identifica de manera única e irrepetible cada registro dentro de una tabla en una base de datos relacional.",
-    "precision": 0.552,
+    "respuesta": "Una clave primaria es un campo o conjunto de campos que identifica de manera única y sin duplicados a cada registro dentro de una tabla en una base de datos relacional.",
+    "precision": 0.516,
     "cobertura": 0.8,
-    "f1": 0.653
+    "f1": 0.627
   },
   {
+    "caso": 2,
     "consulta": "¿Qué es una clave foránea en una base de datos relacional?",
     "referencia": "Una clave foránea es una columna que referencia la clave primaria de otra tabla para relacionar ambas tablas.",
-    "respuesta": "Una clave foránea es un campo o conjunto de campos en una tabla que establece un vínculo lógico con la clave primaria de otra tabla, garantizando así la integridad referencial entre ambas.",
-    "precision": 0.406,
-    "cobertura": 0.722,
-    "f1": 0.52
+    "respuesta": "Una clave foránea es un campo o conjunto de campos en una tabla que establece un vínculo lógico con la clave primaria de otra tabla, garantizando así la integridad referencial entre los datos.",
+    "precision": 0.364,
+    "cobertura": 0.667,
+    "f1": 0.471
   },
   {
+    "caso": 3,
     "consulta": "¿Qué es la normalización de una base de datos relacional?",
     "referencia": "La normalización es el proceso de organizar las tablas de una base de datos para reducir la redundancia y evitar anomalías al modificar los datos.",
-    "respuesta": "La normalización es el proceso de organizar los datos en una base de datos relacional para reducir la redundancia y mejorar la integridad mediante la aplicación de reglas que dividen las tablas en estructuras más eficientes.",
-    "precision": 0.583,
-    "cobertura": 0.84,
-    "f1": 0.689
+    "respuesta": "La normalización de una base de datos relacional es un proceso de organización de los datos para reducir la redundancia y mejorar la integridad mediante la aplicación de reglas que estructuran las tablas de manera lógica.",
+    "precision": 0.528,
+    "cobertura": 0.76,
+    "f1": 0.623
+  },
+  {
+    "caso": 4,
+    "consulta": "¿Cuántos bytes ocupa el tipo INTEGER en PostgreSQL?",
+    "referencia": "El tipo INTEGER ocupa 4 bytes en PostgreSQL.",
+    "respuesta": "El tipo de dato INTEGER en PostgreSQL ocupa exactamente 4 bytes de almacenamiento.",
+    "precision": 0.615,
+    "cobertura": 1.0,
+    "f1": 0.762
+  },
+  {
+    "caso": 5,
+    "consulta": "¿Cuántos bytes ocupa el tipo BIGINT en PostgreSQL?",
+    "referencia": "El tipo BIGINT ocupa 8 bytes en PostgreSQL.",
+    "respuesta": "El tipo de dato BIGINT en PostgreSQL ocupa exactamente 8 bytes de almacenamiento.",
+    "precision": 0.615,
+    "cobertura": 1.0,
+    "f1": 0.762
+  },
+  {
+    "caso": 6,
+    "consulta": "¿Quién propuso el modelo relacional y en qué año?",
+    "referencia": "Edgar F. Codd propuso el modelo relacional en 1970.",
+    "respuesta": "El modelo relacional fue propuesto por Edgar F. Codd en 1970.",
+    "precision": 0.727,
+    "cobertura": 0.889,
+    "f1": 0.8
+  },
+  {
+    "caso": 7,
+    "consulta": "¿Cuál es la longitud máxima de un identificador en PostgreSQL?",
+    "referencia": "La longitud máxima de un identificador en PostgreSQL es de 63 bytes.",
+    "respuesta": "La longitud máxima de un identificador en PostgreSQL es de 63 bytes.",
+    "precision": 1.0,
+    "cobertura": 1.0,
+    "f1": 1.0
+  },
+  {
+    "caso": 8,
+    "consulta": "¿Qué tipo de índice crea PostgreSQL por defecto?",
+    "referencia": "PostgreSQL crea por defecto un índice de tipo B-tree.",
+    "respuesta": "PostgreSQL crea por defecto un índice de tipo B-tree para las claves primarias y las restricciones de unicidad.",
+    "precision": 0.5,
+    "cobertura": 1.0,
+    "f1": 0.667
+  },
+  {
+    "caso": 9,
+    "consulta": "¿Puede una clave primaria contener valores nulos?",
+    "referencia": "No, una clave primaria no puede contener valores nulos.",
+    "respuesta": "No, una clave primaria no puede contener valores nulos porque su función principal es identificar de manera única y obligatoria cada registro en una tabla.",
+    "precision": 0.36,
+    "cobertura": 1.0,
+    "f1": 0.529
+  },
+  {
+    "caso": 10,
+    "consulta": "¿Puede una tabla tener más de una clave primaria?",
+    "referencia": "No, una tabla solo puede tener una clave primaria, aunque esta puede estar formada por varias columnas.",
+    "respuesta": "Una tabla solo puede tener una única clave primaria, la cual puede estar compuesta por una o varias columnas, concepto conocido como clave primaria compuesta.",
+    "precision": 0.52,
+    "cobertura": 0.765,
+    "f1": 0.619
+  },
+  {
+    "caso": 11,
+    "consulta": "¿Qué es un índice en una base de datos relacional?",
+    "referencia": "Un índice es una estructura que acelera la búsqueda de filas en una tabla a cambio de espacio adicional y escrituras más lentas.",
+    "respuesta": "Un índice es una estructura de datos que mejora la velocidad de las operaciones de recuperación de registros en una tabla al permitir que el motor de búsqueda localice filas específicas sin tener que analizar toda la tabla completa.",
+    "precision": 0.359,
+    "cobertura": 0.609,
+    "f1": 0.452
+  },
+  {
+    "caso": 12,
+    "consulta": "¿Qué exige la primera forma normal?",
+    "referencia": "La primera forma normal exige que cada columna contenga valores atómicos y que no existan grupos repetidos.",
+    "respuesta": "La primera forma normal exige que todos los atributos de una tabla contengan únicamente valores atómicos y que no existan grupos repetidos de datos en ninguna fila.",
+    "precision": 0.519,
+    "cobertura": 0.824,
+    "f1": 0.636
+  },
+  {
+    "caso": 13,
+    "consulta": "¿Qué exige la segunda forma normal?",
+    "referencia": "La segunda forma normal exige cumplir la primera y que ninguna columna dependa solo de una parte de la clave primaria.",
+    "respuesta": "La segunda forma normal exige que una tabla esté en primera forma normal y que todos sus atributos no clave dependan funcionalmente de la totalidad de su clave primaria.",
+    "precision": 0.483,
+    "cobertura": 0.667,
+    "f1": 0.56
+  },
+  {
+    "caso": 14,
+    "consulta": "¿Qué exige la tercera forma normal?",
+    "referencia": "La tercera forma normal exige cumplir la segunda y que ninguna columna dependa de otra columna que no sea clave.",
+    "respuesta": "La tercera forma normal exige que la tabla esté en segunda forma normal y que no existan dependencias transitivas, lo cual significa que todos los atributos que no forman parte de la clave primaria deben depender únicamente de la clave y no de otros atributos no clave.",
+    "precision": 0.277,
+    "cobertura": 0.65,
+    "f1": 0.388
+  },
+  {
+    "caso": 15,
+    "consulta": "¿Cómo se representa una relación de muchos a muchos en un modelo relacional?",
+    "referencia": "Una relación de muchos a muchos se representa con una tabla intermedia que contiene las claves foráneas de ambas tablas.",
+    "respuesta": "Una relación de muchos a muchos se representa mediante una tabla intermedia o asociativa que contiene las llaves foráneas de ambas tablas relacionadas.",
+    "precision": 0.783,
+    "cobertura": 0.9,
+    "f1": 0.837
+  },
+  {
+    "caso": 16,
+    "consulta": "¿Dónde se ubica la clave foránea en una relación de uno a muchos?",
+    "referencia": "En una relación de uno a muchos, la clave foránea se ubica en la tabla del lado de muchos.",
+    "respuesta": "La clave foránea se ubica siempre en la tabla que representa el lado de muchos de la relación.",
+    "precision": 0.722,
+    "cobertura": 0.684,
+    "f1": 0.703
+  },
+  {
+    "caso": 17,
+    "consulta": "¿Qué tipo de dato se recomienda en PostgreSQL para almacenar montos de dinero?",
+    "referencia": "Se recomienda NUMERIC, porque almacena valores decimales exactos sin errores de redondeo.",
+    "respuesta": "Para almacenar montos de dinero en PostgreSQL, se recomienda utilizar el tipo de dato numeric por su capacidad de almacenar valores exactos sin errores de redondeo.",
+    "precision": 0.346,
+    "cobertura": 0.75,
+    "f1": 0.474
+  },
+  {
+    "caso": 18,
+    "consulta": "¿Qué hace la opción ON DELETE CASCADE en una clave foránea?",
+    "referencia": "ON DELETE CASCADE elimina automáticamente las filas que referencian a una fila cuando esta se elimina.",
+    "respuesta": "La opción ON DELETE CASCADE permite que, al eliminar un registro en la tabla padre, se borren automáticamente todos los registros relacionados en la tabla hija que dependen de él.",
+    "precision": 0.2,
+    "cobertura": 0.375,
+    "f1": 0.261
+  },
+  {
+    "caso": 19,
+    "consulta": "¿Qué es una restricción CHECK en PostgreSQL?",
+    "referencia": "Una restricción CHECK valida que los valores de una columna cumplan una condición antes de guardarlos.",
+    "respuesta": "Una restricción CHECK en PostgreSQL es una regla de integridad que especifica una condición booleana que deben cumplir los valores en una o más columnas de una tabla para que sean aceptados.",
+    "precision": 0.344,
+    "cobertura": 0.688,
+    "f1": 0.458
+  },
+  {
+    "caso": 20,
+    "consulta": "¿Qué es un diccionario de datos?",
+    "referencia": "Un diccionario de datos es un documento que describe las tablas, columnas, tipos de datos y restricciones de una base de datos.",
+    "respuesta": "Un diccionario de datos es un catálogo organizado que contiene las definiciones, características, relaciones y restricciones de los elementos de información almacenados en una base de datos o sistema.",
+    "precision": 0.552,
+    "cobertura": 0.727,
+    "f1": 0.627
   }
 ]
