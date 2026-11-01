@@ -1,6 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Requisitos
 
@@ -73,13 +73,19 @@ Scripts complementarios, que se ejecutan de la misma forma:
 python src/evaluar_salidas.py
 ```
 
-Envía tres preguntas de modelado de datos al modelo a través del cliente, calcula la precisión, la cobertura y el F1 de cada respuesta frente a una referencia propia, y guarda consulta, referencia, respuesta y métricas en `docs/resultados_metricas.json`. Muestra además los promedios y los casos ordenados por F1, del peor al mejor. Realiza 3 peticiones por ejecución.
+Envía 20 preguntas de modelado de datos y PostgreSQL al modelo a través del cliente, con una pausa de 2 segundos entre llamadas, calcula la precisión, la cobertura y el F1 de cada respuesta frente a una referencia propia y guarda caso, consulta, referencia, respuesta y métricas en `docs/resultados_metricas.json`. Muestra además los promedios y la muestra para revisar a mano: los 5 casos con menor F1 y los 5 con mayor F1. Realiza 20 peticiones por ejecución.
+
+```
+python src/revision_manual.py
+```
+
+Guarda en `docs/revision_manual.json` la revisión manual de esa muestra: por cada caso, la calificación de corrección factual, completitud y contradicción, con una nota que la justifica. No realiza peticiones. Los límites de la métrica que se desprenden de esta revisión están en `docs/limites_metrica.md`.
 
 ```
 python src/pipeline_texto.py
 ```
 
-Envía las mismas tres preguntas, compara cada respuesta con su referencia por coincidencia de palabras, sobre texto crudo y sobre texto procesado, y guarda el resultado en `docs/registro_pipeline_texto.md`. Realiza 3 peticiones por ejecución.
+Envía las tres primeras preguntas, compara cada respuesta con su referencia por coincidencia de palabras, sobre texto crudo y sobre texto procesado, y guarda el resultado en `docs/registro_pipeline_texto.md`. Realiza 3 peticiones por ejecución.
 
 ```
 python src/contar_tokens.py
@@ -101,7 +107,7 @@ Ejecuta tres veces cada prompt del banco (`prompts/banco.py`), valida que la res
 
 ## Pruebas
 
-Las pruebas unitarias están en `tests/`: `test_cliente.py` cubre el cliente y `test_pipeline_texto.py`, el pipeline de texto. Las del cliente simulan la API y las esperas con mocks, por lo que ninguna prueba consume tokens ni requiere conexión. Con el entorno activo, desde la raíz del repositorio:
+Las pruebas unitarias están en `tests/`: `test_cliente.py` cubre el cliente y `test_pipeline_texto.py`, el pipeline de texto, sus métricas y dos de los límites documentados en `docs/limites_metrica.md`. Las del cliente simulan la API y las esperas con mocks, por lo que ninguna prueba consume tokens ni requiere conexión. Con el entorno activo, desde la raíz del repositorio:
 
 ```
 pytest tests/ -v
@@ -145,7 +151,7 @@ Normaliza el texto antes de compararlo, para que las diferencias de formato (may
 | `calcular_metricas(texto_referencia, texto_respuesta)` | Procesa ambos textos y calcula la precisión, la cobertura y el F1 en un solo paso. |
 | `resumir_metricas(resultados)` | Promedia la precisión, la cobertura y el F1 de una lista de resultados. |
 
-Estas métricas miden la elección de palabras, no si la respuesta es correcta: no consideran el orden ni el significado, penalizan los sinónimos y apenas cambian si falta una negación o cambia un dato concreto, como una fecha o una cifra.
+Estas métricas miden la elección de palabras, no si la respuesta es correcta. Sus límites, con ejemplos de este proyecto y una recomendación de uso, están en `docs/limites_metrica.md`.
 
 ## Módulo `src/consumir_gemini.py`
 
@@ -189,7 +195,7 @@ La llamada final de `consumir_gemini.py` captura los tres tipos de excepción y 
 
 - `src/`: código fuente.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
-- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`) y las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`).
+- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`), las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`), la revisión manual de una muestra de esas salidas (`revision_manual.json`) y los límites de la métrica de evaluación (`limites_metrica.md`).
 - `tests/`: pruebas unitarias del cliente (`test_cliente.py`) y del pipeline de texto (`test_pipeline_texto.py`).
 - `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos.
 - `requirements.txt`: dependencias de Python.
