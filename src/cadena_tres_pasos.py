@@ -3,7 +3,6 @@ import os
 from dotenv import load_dotenv
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
-from langchain_core.runnables import Runnable
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from consumir_gemini import MODELO
@@ -52,7 +51,7 @@ PLANTILLA_GENERAR = PromptTemplate.from_template(
 )
 
 
-def construir_cadena(modelo) -> Runnable:
+def construir_cadena(modelo):
     paso_extraer = PLANTILLA_EXTRAER | modelo | StrOutputParser()
     paso_modelar = PLANTILLA_MODELAR | modelo | StrOutputParser()
     paso_generar = PLANTILLA_GENERAR | modelo | StrOutputParser()
@@ -72,6 +71,7 @@ if __name__ == "__main__":
         model=MODELO,
         google_api_key=os.getenv("API_KEY"),
         temperature=0,
+        timeout=60,
     )
     cadena = construir_cadena(modelo)
     resultado = cadena.invoke({"descripcion": DESCRIPCION_NEGOCIO})

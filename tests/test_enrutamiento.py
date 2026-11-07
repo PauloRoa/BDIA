@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
 
 from enrutamiento import (
     construir_cadena_con_enrutamiento,
@@ -36,17 +37,14 @@ def test_enrutamiento_va_a_cadena_nueva():
 
 
 def test_cadena_nueva_recibe_la_descripcion_original():
-    cadena_nueva_falsa = crear_ruta_falsa("script")
     cadena = construir_cadena_con_enrutamiento(
         paso_clasificacion=crear_clasificacion_falsa("nueva"),
-        cadena_nueva=cadena_nueva_falsa,
+        cadena_nueva=RunnableLambda(lambda entrada: entrada["descripcion"]),
     )
 
-    cadena.invoke(ENTRADA)
+    resultado = cadena.invoke(ENTRADA)
 
-    entrada_recibida = cadena_nueva_falsa.call_args.args[0]
-    assert entrada_recibida["descripcion"] == ENTRADA["descripcion"]
-    assert entrada_recibida["categoria"] == "nueva"
+    assert resultado == ENTRADA["descripcion"]
 
 
 def test_enrutamiento_va_a_cadena_existente():
@@ -101,3 +99,13 @@ def test_clasificacion_normaliza_antes_de_comparar():
     resultado = construir_paso_clasificacion(modelo_falso).invoke(ENTRADA)
 
     assert resultado == "nueva"
+
+
+def test_clasificacion_ignora_puntuacion_y_formato():
+    for respuesta_modelo in ["Nueva.", "**nueva**", " NUEVA \n"]:
+        modelo_falso = MagicMock()
+        modelo_falso.return_value = AIMessage(content=respuesta_modelo)
+
+        resultado = construir_paso_clasificacion(modelo_falso).invoke(ENTRADA)
+
+        assert resultado == "nueva"

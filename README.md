@@ -1,6 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Requisitos
 
@@ -67,6 +67,18 @@ python src/consumir_gemini.py
 
 Envía una pregunta fija al modelo `gemini-3.1-flash-lite` (constante `MODELO`) directamente, sin reintentos, y muestra el texto generado.
 
+```
+python src/enrutamiento.py
+```
+
+Procesa tres solicitudes de ejemplo con el flujo orquestado: la descripción de un negocio, un pedido para modificar una base existente y una pregunta conceptual. Clasifica cada una y la dirige a su ruta: genera el script de creación, rechaza la solicitud por estar fuera de alcance o pide una descripción del negocio. Muestra la respuesta de cada solicitud y el registro de cada petición. Realiza 8 peticiones por ejecución: 4 para la descripción de negocio y 2 para cada una de las otras.
+
+```
+python src/cadena_tres_pasos.py
+```
+
+Genera, sin clasificación previa, el script de creación para la descripción de negocio de ejemplo (constante `DESCRIPCION_NEGOCIO`). Realiza 3 peticiones por ejecución.
+
 Scripts complementarios, que se ejecutan de la misma forma:
 
 ```
@@ -107,7 +119,15 @@ Ejecuta tres veces cada prompt del banco (`prompts/banco.py`), valida que la res
 
 ## Pruebas
 
-Las pruebas unitarias están en `tests/`: `test_cliente.py` cubre el cliente y `test_pipeline_texto.py`, el pipeline de texto, sus métricas y dos de los límites documentados en `docs/limites_metrica.md`. Las del cliente simulan la API y las esperas con mocks, por lo que ninguna prueba consume tokens ni requiere conexión. Con el entorno activo, desde la raíz del repositorio:
+Las pruebas unitarias están en `tests/`:
+
+- `test_cliente.py`: el cliente.
+- `test_pipeline_texto.py`: el pipeline de texto, sus métricas y dos de los límites documentados en `docs/limites_metrica.md`.
+- `test_cadena_tres_pasos.py`: que la cadena de tres pasos haga tres llamadas, que cada paso reciba la salida del anterior y que una entrada con una clave equivocada falle antes de llamar al modelo.
+- `test_enrutamiento.py`: la normalización de la clasificación y cada una de las rutas, incluida la ruta por defecto.
+- `test_orquestacion.py`: los respaldos de las rutas, la respuesta segura ante fallos fuera de las rutas, incluido el error de configuración, y las entradas vacías o que no son texto.
+
+Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado reemplazan el modelo y las rutas por mocks o funciones falsas. Ninguna prueba consume tokens ni requiere conexión. Con el entorno activo, desde la raíz del repositorio:
 
 ```
 pytest tests/ -v
@@ -136,22 +156,40 @@ except RuntimeError as error:
     print(f"El servicio no respondió tras varios intentos: {error}")
 ```
 
-## Pipeline de texto `src/pipeline_texto.py`
+## Flujo orquestado `src/enrutamiento.py` y `src/cadena_tres_pasos.py`
 
-Normaliza el texto antes de compararlo, para que las diferencias de formato (mayúsculas, puntuación, espacios) no distorsionen las métricas, y calcula las métricas de comparación entre una referencia y una respuesta.
+Construido con LangChain. Las llamadas al modelo las hace `ChatGoogleGenerativeAI` (paquete `langchain-google-genai`), con el mismo modelo (`MODELO`, importado de `consumir_gemini.py`), la misma clave (`API_KEY`, que se le pasa de forma explícita) y `temperature=0`. No pasa por `cliente.py`, por lo que no muestra el costo de cada operación.
+
+El servicio solo diseña bases de datos nuevas. Cada solicitud se clasifica primero y se dirige a una de tres rutas:
+
+| Categoría | Cuándo | Ruta |
+|---|---|---|
+| `nueva` | La solicitud describe un negocio para diseñar una base nueva | Cadena de tres pasos que genera el script de creación |
+| `existente` | La solicitud pide modificar, migrar o analizar una base que ya existe | Respuesta que rechaza la solicitud y explica el alcance del servicio |
+| `otra` o cualquier categoría inesperada | Cualquier otra solicitud, o una respuesta del clasificador fuera de lo esperado | Respuesta que pide una descripción del negocio |
+
+La ruta por defecto es la segura: una clasificación inesperada nunca genera un script.
+
+La cadena de tres pasos (`construir_cadena` en `cadena_tres_pasos.py`) encadena tres prompts, y la salida de cada uno es la entrada del siguiente:
+
+| Paso | Responsabilidad |
+|---|---|
+| 1. Extraer | Identifica las entidades del negocio, sus atributos y las relaciones entre ellas, sin proponer tablas. |
+| 2. Modelar | Convierte esas entidades en tablas con columnas, tipos de PostgreSQL, clave primaria y claves foráneas, sin columnas que se puedan calcular a partir de otras tablas. |
+| 3. Generar | Escribe el script con sentencias `CREATE TABLE`, ordenadas para que cada tabla se cree después de las tablas que referencia. |
+
+Los prompts le indican al modelo que incluya los atributos que la descripción menciona y que, si sugiere otros habituales, los marque como supuesto: sin `NOT NULL` y con el comentario SQL `-- supuesto` después de la coma que separa esa columna de la siguiente. Como son instrucciones a un modelo generativo, el resultado puede variar entre ejecuciones. El script es un borrador sujeto a revisión humana.
 
 | Función | Responsabilidad |
 |---|---|
-| `limpiar_texto(texto)` | Pasa el texto a minúsculas y quita la puntuación y los espacios repetidos. Si recibe algo que no es texto, lanza `TypeError`. |
-| `tokenizar(texto_limpio)` | Separa el texto limpio en una lista de palabras. |
-| `procesar_texto(texto)` | Limpia y tokeniza el texto en un solo paso. |
-| `calcular_coincidencia(tokens_referencia, tokens_respuesta)` | Devuelve la proporción de palabras distintas de la referencia que también aparecen en la respuesta. Si la referencia no tiene palabras, devuelve 0. |
-| `contar_coincidencias(tokens_referencia, tokens_respuesta)` | Cuenta las palabras en común, respetando las repeticiones: cada palabra coincide como máximo tantas veces como aparece en ambos lados. |
-| `calcular_precision_cobertura_f1(tokens_referencia, tokens_respuesta)` | Calcula la precisión (coincidencias sobre el total de la respuesta), la cobertura (coincidencias sobre el total de la referencia) y el F1, que combina ambas. Si alguna lista está vacía, devuelve 0 en las tres. |
-| `calcular_metricas(texto_referencia, texto_respuesta)` | Procesa ambos textos y calcula la precisión, la cobertura y el F1 en un solo paso. |
-| `resumir_metricas(resultados)` | Promedia la precisión, la cobertura y el F1 de una lista de resultados. |
-
-Estas métricas miden la elección de palabras, no si la respuesta es correcta. Sus límites, con ejemplos de este proyecto y una recomendación de uso, están en `docs/limites_metrica.md`.
+| `construir_cadena(modelo)` | Arma la cadena de tres pasos. Recibe el modelo como parámetro para poder reemplazarlo en las pruebas. |
+| `construir_paso_clasificacion(modelo)` | Clasifica la solicitud en una palabra y la normaliza con `limpiar_texto` del pipeline de texto (minúsculas y sin puntuación) antes de compararla. |
+| `construir_cadena_rechazo(modelo)` | Responde a una solicitud sobre una base existente explicando que está fuera del alcance del servicio. |
+| `construir_cadena_aclaracion(modelo)` | Responde pidiendo una descripción del negocio, con un ejemplo de qué incluir. |
+| `construir_cadena_con_enrutamiento(paso_clasificacion, cadena_nueva, cadena_existente, cadena_aclaracion)` | Agrega la categoría a la entrada sin perder la descripción original y ejecuta la ruta que corresponde. |
+| `construir_ruta_segura(cadena, mensaje_respaldo)` | Protege una ruta: si falla, registra que se usó el respaldo y responde con un mensaje fijo propio de esa ruta. |
+| `procesar_solicitud_segura(cadena, descripcion)` | Punto de entrada del flujo: si la solicitud está vacía, pide una descripción del negocio sin llamar al modelo; si no, ejecuta la cadena completa y, si algo falla fuera de las rutas, registra el error con su traceback y devuelve una respuesta segura. |
+| `es_error_de_configuracion(error)` | Indica si un error corresponde a una clave inválida (motivo `API_KEY_INVALID`), para responder con el mensaje de configuración en vez del general. |
 
 ## Módulo `src/consumir_gemini.py`
 
@@ -191,12 +229,20 @@ Cada falla se captura en la función a la que corresponde y se informa con un me
 
 La llamada final de `consumir_gemini.py` captura los tres tipos de excepción y muestra `No se pudo generar la respuesta: <mensaje>`. La de `cliente.py` captura `ValueError` y `RuntimeError`, porque `consultar_modelo` ya convierte el `TimeoutError` final en `RuntimeError`.
 
+En el flujo orquestado, ninguna falla al procesar una solicitud detiene el programa: cada una se registra con `logging` y quien hizo la solicitud siempre recibe una respuesta.
+
+| Falla | Dónde se maneja | Registro | Respuesta |
+|---|---|---|---|
+| Falla de una ruta | `construir_ruta_segura` | `WARNING`, sin el detalle del error | El mensaje de respaldo de esa ruta: no se pudo generar el borrador, el rechazo por alcance o el pedido de una descripción del negocio |
+| Clave inválida (motivo `API_KEY_INVALID`) | `procesar_solicitud_segura` | `ERROR` con traceback | `El servicio no está disponible por un problema de configuración. El error quedó registrado para el administrador.` |
+| Cualquier otra falla fuera de las rutas, como en la clasificación | `procesar_solicitud_segura` | `ERROR` con traceback | `No pudimos procesar tu solicitud en este momento. Intenta de nuevo más tarde.` |
+
 ## Estructura del repositorio
 
 - `src/`: código fuente.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
 - `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`), las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`), la revisión manual de una muestra de esas salidas (`revision_manual.json`) y los límites de la métrica de evaluación (`limites_metrica.md`).
-- `tests/`: pruebas unitarias del cliente (`test_cliente.py`) y del pipeline de texto (`test_pipeline_texto.py`).
+- `tests/`: pruebas unitarias del cliente (`test_cliente.py`), del pipeline de texto (`test_pipeline_texto.py`), de la cadena de tres pasos (`test_cadena_tres_pasos.py`), del enrutamiento (`test_enrutamiento.py`) y del manejo de errores del flujo orquestado (`test_orquestacion.py`).
 - `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos.
 - `requirements.txt`: dependencias de Python.
 - `.env.example`: plantilla de variables de entorno, sin valores reales.
