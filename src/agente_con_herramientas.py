@@ -6,6 +6,7 @@ from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
+from pydantic import BaseModel, Field
 
 from consumir_gemini import MODELO
 from enrutamiento import (
@@ -39,17 +40,59 @@ BUENAS_PRACTICAS = {
     ),
 }
 
+EJEMPLOS = {
+    "clave primaria": (
+        "en una tabla cliente, la columna id serial PRIMARY KEY identifica a "
+        "cada cliente aunque dos tengan el mismo nombre."
+    ),
+    "clave foránea": (
+        "en una tabla venta, cliente_id integer REFERENCES cliente(id) impide "
+        "registrar una venta de un cliente que no existe."
+    ),
+    "muchos a muchos": (
+        "una venta incluye varios productos y un producto aparece en varias "
+        "ventas, así que la tabla venta_producto guarda venta_id y producto_id, "
+        "con la cantidad y el precio de cada línea."
+    ),
+    "normalización": (
+        "el total de una venta no se guarda en la tabla venta, porque se "
+        "calcula sumando sus líneas en venta_producto."
+    ),
+    "tipo de dato": (
+        "el precio de un producto se guarda como numeric(10,2) y no como real, "
+        "para evitar errores de redondeo en los montos."
+    ),
+}
+
 SENTENCIAS_PERMITIDAS = ("CREATE TABLE", "CREATE INDEX")
 
 
-@tool
-def consultar_buenas_practicas(tema: str) -> str:
+class ArgumentosBuenasPracticas(BaseModel):
+    tema: str = Field(
+        description=(
+            "Tema de modelado sobre el que se pregunta, por ejemplo "
+            "'muchos a muchos' o 'clave foránea'."
+        ),
+    )
+    incluir_ejemplo: bool = Field(
+        default=False,
+        description=(
+            "Si es True, agrega un ejemplo de modelado del tema, no solo la "
+            "buena práctica."
+        ),
+    )
+
+
+@tool("consultar_buenas_practicas", args_schema=ArgumentosBuenasPracticas)
+def consultar_buenas_practicas(tema: str, incluir_ejemplo: bool = False) -> str:
     """Devuelve la buena práctica de modelado de bases de datos relacionales
     sobre un tema, como clave primaria, clave foránea, muchos a muchos,
-    normalización o tipo de dato. Usar cuando el usuario pregunta cómo o por
-    qué se modela algo de cierta forma."""
+    normalización o tipo de dato, con un ejemplo si se pide. Usar cuando el
+    usuario pregunta cómo o por qué se modela algo de cierta forma."""
     for clave, practica in BUENAS_PRACTICAS.items():
         if clave in tema.lower():
+            if incluir_ejemplo:
+                return f"{practica} Ejemplo: {EJEMPLOS[clave]}"
             return practica
     return "No hay una buena práctica registrada para ese tema."
 
@@ -77,23 +120,24 @@ def verificar_sentencias_permitidas(script: str) -> str:
 
 HERRAMIENTAS = [consultar_buenas_practicas, verificar_sentencias_permitidas]
 
+INSTRUCCION_SISTEMA = (
+    "Eres un asistente de diseño de bases de datos relacionales en PostgreSQL. "
+    "Usa las herramientas disponibles cuando las necesites y apóyate en lo que "
+    "devuelven. Responde en español, en no más de tres oraciones y sin formato "
+    "markdown."
+)
+
 PROMPT_AGENTE = ChatPromptTemplate.from_messages(
     [
-        (
-            "system",
-            "Eres un asistente de diseño de bases de datos relacionales en "
-            "PostgreSQL. Usa las herramientas disponibles cuando las necesites "
-            "y apóyate en lo que devuelven. Responde en español, en no más de "
-            "tres oraciones y sin formato markdown.",
-        ),
+        ("system", INSTRUCCION_SISTEMA),
         ("human", "{entrada}"),
         MessagesPlaceholder("agent_scratchpad"),
     ]
 )
 
 
-def construir_agente(modelo):
-    agente = create_tool_calling_agent(modelo, HERRAMIENTAS, PROMPT_AGENTE)
+def construir_agente(modelo, prompt=PROMPT_AGENTE):
+    agente = create_tool_calling_agent(modelo, HERRAMIENTAS, prompt)
     return AgentExecutor(
         agent=agente,
         tools=HERRAMIENTAS,
