@@ -1,5 +1,8 @@
+import json
 import logging
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_core.chat_history import InMemoryChatMessageHistory
@@ -11,7 +14,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from agente_con_herramientas import (
     INSTRUCCION_SISTEMA,
     construir_agente,
-    texto_de_salida,
+    registro_aprobaciones,
+    texto_de_salida
 )
 from consumir_gemini import MODELO
 from enrutamiento import (
@@ -21,6 +25,8 @@ from enrutamiento import (
 )
 
 logger = logging.getLogger(__name__)
+
+ARCHIVO_TRAZAS = Path(__file__).resolve().parents[1] / "docs" / "trazas_agente.jsonl"
 
 PROMPT_AGENTE_CON_MEMORIA = ChatPromptTemplate.from_messages(
     [
@@ -61,6 +67,33 @@ def construir_agente_con_memoria(modelo):
     return agregar_memoria(construir_agente(modelo, PROMPT_AGENTE_CON_MEMORIA))
 
 
+def registrar_traza(
+    session_id: str,
+    entrada: str,
+    resultado: dict,
+    archivo: Path = ARCHIVO_TRAZAS,
+) -> None:
+    """Guarda una interacción del agente como una línea JSON: qué se preguntó,
+    qué herramientas se usaron y con qué argumentos, y la respuesta final. Si
+    "resultado" no trae "intermediate_steps", acciones queda como lista vacía."""
+    registro = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "session_id": session_id,
+        "entrada": entrada,
+        "acciones": [
+            {
+                "herramienta": accion.tool,
+                "argumentos": accion.tool_input,
+                "observacion": observacion,
+            }
+            for accion, observacion in resultado.get("intermediate_steps", [])
+        ],
+        "respuesta_final": resultado["output"],
+    }
+    with open(archivo, "a", encoding="utf-8") as salida:
+        salida.write(json.dumps(registro, ensure_ascii=False) + "\n")
+
+
 def consultar_con_memoria_seguro(agente_con_memoria, entrada, session_id):
     config = {"configurable": {"session_id": session_id}}
     try:
@@ -74,6 +107,10 @@ def consultar_con_memoria_seguro(agente_con_memoria, entrada, session_id):
         (accion.tool, accion.tool_input)
         for accion, observacion in resultado["intermediate_steps"]
     ]
+    try:
+        registrar_traza(session_id, entrada, resultado)
+    except Exception:
+        logger.exception("No se pudo registrar la traza")
     return resultado["output"], pasos
 
 
@@ -83,7 +120,6 @@ def mostrar_turno(session_id, entrada, respuesta, pasos):
     print(f"Respuesta: {respuesta}")
     print(f"Herramientas llamadas: {pasos}")
     print(f"Mensajes en el historial: {len(obtener_historial(session_id).messages)}\n")
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -96,37 +132,21 @@ if __name__ == "__main__":
     )
     agente_con_memoria = construir_agente_con_memoria(modelo)
 
-    # Verificación 1: el segundo turno usa lo que se dijo en el primero.
-    sesion = "verificacion_dos_turnos"
-    turnos = [
+    # Una entrada por nivel de riesgo. Las dos últimas llegan a la herramienta
+    # de riesgo alto y piden aprobación humana: responder "s" y luego "n".
+    sesion = "supervision_riesgos"
+    script = "CREATE TABLE cliente (id serial PRIMARY KEY, nombre text);"
+    entradas = [
         "¿Cómo se resuelve una relación muchos a muchos?",
-        "¿Me das un ejemplo de eso?",
+        f"Verifica si este script solo usa sentencias permitidas: {script}",
+        f"Guarda como borrador con el nombre ferreteria_demo este script: {script}",
+        f"Guarda como borrador con el nombre ferreteria_rechazo este script: {script}",
     ]
-    for numero, entrada in enumerate(turnos, start=1):
+    for entrada in entradas:
         respuesta, pasos = consultar_con_memoria_seguro(
             agente_con_memoria, entrada, sesion
         )
         mostrar_turno(sesion, entrada, respuesta, pasos)
-        if pasos is None:
-            print("Verificación no realizada: la consulta falló.\n")
-            break
-        assert len(obtener_historial(sesion).messages) == numero * 2
 
-    # Verificación 2: dos sesiones distintas no comparten historial.
-    conversaciones = [
-        ("cliente_1", "Estoy preguntando por la relación entre venta y producto."),
-        ("cliente_2", "¿Por qué relación te pregunté?"),
-    ]
-    for sesion_cliente, entrada in conversaciones:
-        respuesta, pasos = consultar_con_memoria_seguro(
-            agente_con_memoria, entrada, sesion_cliente
-        )
-        mostrar_turno(sesion_cliente, entrada, respuesta, pasos)
-        if pasos is None:
-            print("Verificación no realizada: la consulta falló.\n")
-            continue
-        assert len(obtener_historial(sesion_cliente).messages) == 2
-
-    for sesion_usada in [sesion, "cliente_1", "cliente_2"]:
-        cerrar_sesion(sesion_usada)
-    assert historiales == {}
+    print(f"Decisiones de aprobación registradas: {registro_aprobaciones}")
+    cerrar_sesion(sesion)

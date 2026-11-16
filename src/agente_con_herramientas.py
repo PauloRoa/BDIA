@@ -1,5 +1,9 @@
 import logging
 import os
+import queue
+import threading
+from datetime import datetime, timezone
+from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
@@ -66,6 +70,54 @@ EJEMPLOS = {
 
 SENTENCIAS_PERMITIDAS = ("CREATE TABLE", "CREATE INDEX")
 
+CARPETA_BORRADORES = Path(__file__).resolve().parents[1] / "docs" / "borradores"
+TIEMPO_LIMITE_APROBACION = 60
+
+registro_aprobaciones = []
+
+
+def revisar_sentencias(script):
+    sentencias = [sentencia.strip() for sentencia in script.split(";")]
+    sentencias = [sentencia for sentencia in sentencias if sentencia]
+    no_permitidas = [
+        sentencia
+        for sentencia in sentencias
+        if not sentencia.upper().startswith(SENTENCIAS_PERMITIDAS)
+    ]
+    return sentencias, no_permitidas
+
+
+def esperar_aprobacion(mensaje: str, tiempo_limite_segundos: int = 15) -> bool:
+    cola_respuesta = queue.Queue()
+
+    def pedir_entrada():
+        try:
+            texto = input(mensaje)
+            cola_respuesta.put(texto.strip().lower())
+        except (EOFError, KeyboardInterrupt):
+            cola_respuesta.put("")
+
+    hilo = threading.Thread(target=pedir_entrada, daemon=True)
+    hilo.start()
+
+    try:
+        respuesta = cola_respuesta.get(timeout=tiempo_limite_segundos)
+        return respuesta == "s"
+    except queue.Empty:
+        print("Tiempo de espera agotado: la acción queda rechazada.")
+        return False
+
+
+def registrar_aprobacion(herramienta: str, argumentos: dict, aprobado: bool) -> None:
+    registro_aprobaciones.append(
+        {
+            "herramienta": herramienta,
+            "argumentos": argumentos,
+            "aprobado": aprobado,
+            "momento": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
 
 class ArgumentosBuenasPracticas(BaseModel):
     tema: str = Field(
@@ -80,6 +132,18 @@ class ArgumentosBuenasPracticas(BaseModel):
             "Si es True, agrega un ejemplo de modelado del tema, no solo la "
             "buena práctica."
         ),
+    )
+
+
+class ArgumentosGuardarBorrador(BaseModel):
+    nombre: str = Field(
+        description=(
+            "Nombre del borrador, solo con letras, números y guion bajo, sin "
+            "extensión, por ejemplo 'ferreteria_ventas'."
+        ),
+    )
+    script: str = Field(
+        description="Script SQL completo que se guarda como borrador.",
     )
 
 
@@ -102,15 +166,9 @@ def verificar_sentencias_permitidas(script: str) -> str:
     """Revisa si un script SQL usa solo las sentencias que el servicio permite:
     CREATE TABLE y CREATE INDEX. Usar cuando el usuario entrega un script SQL
     y pregunta si cumple las reglas del servicio."""
-    sentencias = [sentencia.strip() for sentencia in script.split(";")]
-    sentencias = [sentencia for sentencia in sentencias if sentencia]
+    sentencias, no_permitidas = revisar_sentencias(script)
     if not sentencias:
         return "El script no contiene sentencias."
-    no_permitidas = [
-        sentencia
-        for sentencia in sentencias
-        if not sentencia.upper().startswith(SENTENCIAS_PERMITIDAS)
-    ]
     if no_permitidas:
         return "El script contiene sentencias no permitidas: " + "; ".join(
             no_permitidas
@@ -118,7 +176,63 @@ def verificar_sentencias_permitidas(script: str) -> str:
     return f"El script cumple: sus {len(sentencias)} sentencias están permitidas."
 
 
-HERRAMIENTAS = [consultar_buenas_practicas, verificar_sentencias_permitidas]
+@tool("guardar_borrador", args_schema=ArgumentosGuardarBorrador)
+def guardar_borrador(nombre: str, script: str) -> str:
+    """Guarda un script SQL como borrador en docs/borradores. Si ya existe un
+    borrador con ese nombre, lo reemplaza y la versión anterior se pierde:
+    acción irreversible que requiere aprobación humana antes de ejecutarse.
+    Usar solo cuando el usuario pide guardar un script."""
+    if not nombre.replace("_", "").isalnum():
+        return (
+            "No se guardó: el nombre solo puede tener letras, números y "
+            "guion bajo."
+        )
+    sentencias, no_permitidas = revisar_sentencias(script)
+    if not sentencias:
+        return "No se guardó: el script no contiene sentencias."
+    if no_permitidas:
+        return "No se guardó: el script contiene sentencias no permitidas: " + (
+            "; ".join(no_permitidas)
+        )
+
+    ruta = CARPETA_BORRADORES / f"{nombre}.sql"
+    reemplaza = ruta.exists()
+    accion = "reemplazar el borrador existente" if reemplaza else "crear el borrador"
+    mensaje = (
+        f"[SUPERVISIÓN HUMANA] El agente quiere {accion} '{nombre}.sql' con "
+        f"{len(sentencias)} sentencias. ¿Aprobar? (s/n): "
+    )
+    aprobado = esperar_aprobacion(mensaje, TIEMPO_LIMITE_APROBACION)
+    registrar_aprobacion(
+        herramienta="guardar_borrador",
+        argumentos={"nombre": nombre, "reemplaza": reemplaza},
+        aprobado=aprobado,
+    )
+    if not aprobado:
+        return (
+            "Guardado rechazado por el supervisor humano o sin respuesta a "
+            "tiempo: no se escribió ningún archivo."
+        )
+
+    CARPETA_BORRADORES.mkdir(parents=True, exist_ok=True)
+    with open(ruta, "w", encoding="utf-8") as archivo:
+        archivo.write(script)
+    if reemplaza:
+        return (
+            f"Guardado aprobado por el supervisor humano: se reemplazó el "
+            f"borrador '{nombre}.sql'."
+        )
+    return (
+        f"Guardado aprobado por el supervisor humano: se creó el borrador "
+        f"'{nombre}.sql'."
+    )
+
+
+HERRAMIENTAS = [
+    consultar_buenas_practicas,
+    verificar_sentencias_permitidas,
+    guardar_borrador,
+]
 
 INSTRUCCION_SISTEMA = (
     "Eres un asistente de diseño de bases de datos relacionales en PostgreSQL. "
