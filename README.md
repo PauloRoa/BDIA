@@ -1,6 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Un agente con herramientas y memoria por sesión responde consultas de modelado, con aprobación humana para su única acción de riesgo alto y un registro de trazas de cada interacción. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Un agente con herramientas y memoria por sesión responde consultas de modelado, con aprobación humana para su única acción de riesgo alto y un registro de trazas de cada interacción. Un índice vectorial de buenas prácticas de modelado en PostgreSQL, con los documentos divididos en chunks y sus embeddings de Gemini, se guarda en Chroma. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Requisitos
 
@@ -91,6 +91,12 @@ python src/agente_con_memoria.py
 
 Ejecuta el agente con memoria en una misma sesión (`supervision_riesgos`) con cuatro consultas: una por cada herramienta de riesgo bajo y dos de `guardar_borrador`, la herramienta de riesgo alto. En esas dos últimas, el programa se detiene y pide por consola la aprobación humana (`s` para aprobar, cualquier otra respuesta rechaza; se espera hasta 60 segundos). Cada ejecución agrega líneas a `docs/trazas_agente.jsonl` y, si se aprueba, crea archivos en `docs/borradores/`. Al terminar imprime las decisiones de aprobación registradas. Como `docs/trazas_agente.jsonl` está versionado como evidencia, cada ejecución lo modifica; para conservar la evidencia original se puede restaurar con `git restore docs/trazas_agente.jsonl`.
 
+```
+python src/indexar_corpus.py
+```
+
+Lee los documentos `.md` de `corpus/`, los divide en chunks de hasta 500 caracteres con un traslape de 75, calcula un embedding por chunk con `models/gemini-embedding-001` (consume tokens) y los guarda en `vectorstore/`. Al terminar se reconecta al índice guardado y muestra cuántos chunks contiene. Con el corpus actual son 14 chunks de 7 documentos. Si se vuelve a ejecutar, actualiza los chunks que ya existían sin duplicarlos, elimina los que ya no corresponden al corpus y calcula de nuevo los embeddings de todos los chunks. Si falla, muestra el motivo, termina con código 1 y no modifica el índice anterior.
+
 Scripts complementarios, que se ejecutan de la misma forma:
 
 ```
@@ -139,8 +145,9 @@ Las pruebas unitarias están en `tests/`:
 - `test_enrutamiento.py`: la normalización de la clasificación y cada una de las rutas, incluida la ruta por defecto.
 - `test_orquestacion.py`: los respaldos de las rutas, la respuesta segura ante fallos fuera de las rutas, incluido el error de configuración, y las entradas vacías o que no son texto.
 - `test_agente.py`: las herramientas del agente, la aprobación humana (solo `s` aprueba; la falta de entrada y el tiempo agotado rechazan), el guardado de borradores aprobado, rechazado y con entradas no válidas, el historial separado por sesión, el registro de trazas y que un fallo al registrar la traza no impida entregar la respuesta.
+- `test_indexar_corpus.py`: la carga del corpus, la división en chunks, los ids estables, el guardado en el índice y la eliminación de los chunks sobrantes, que un fallo de la API no toque el índice anterior, la reconexión sin recalcular embeddings y la construcción de los embeddings con la clave.
 
-Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado y las del agente reemplazan el modelo, las rutas, la entrada por consola y la escritura de borradores por mocks o funciones falsas. Ninguna prueba consume tokens ni requiere conexión. Las pruebas del registro de trazas escriben un archivo temporal en `tests/` que se elimina al terminar. Con el entorno activo, desde la raíz del repositorio:
+Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado y las del agente reemplazan el modelo, las rutas, la entrada por consola y la escritura de borradores por mocks o funciones falsas; las de la indexación reemplazan Chroma y los embeddings. Ninguna prueba consume tokens ni requiere conexión. Las pruebas del registro de trazas escriben un archivo temporal en `tests/` que se elimina al terminar. Con el entorno activo, desde la raíz del repositorio:
 
 ```
 pytest tests/ -v
@@ -233,6 +240,52 @@ La memoria (`agente_con_memoria.py`) guarda el historial de cada sesión en un d
 
 Los niveles de riesgo, la aprobación humana, la revisión de las trazas y el procedimiento ante un comportamiento inesperado están documentados en `docs/limites_autonomia_agente.md`. La traza de evidencia está en `docs/trazas_agente.jsonl`.
 
+## Indexación `src/indexar_corpus.py`
+
+Construida con LangChain: `RecursiveCharacterTextSplitter` (paquete `langchain-text-splitters`), `GoogleGenerativeAIEmbeddings` (`langchain-google-genai`, modelo `models/gemini-embedding-001`) y `Chroma` (`langchain-chroma`). La clave (`API_KEY`) se le pasa a los embeddings de forma explícita.
+
+El corpus son siete documentos breves de buenas prácticas de modelado en PostgreSQL, en `corpus/`. Cada archivo se carga como un documento cuya metadata `fuente` es el nombre del archivo, y cada chunk conserva la fuente de su documento.
+
+| Documento (`fuente`) | Tema |
+|---|---|
+| `clave_primaria.md` | Clave primaria |
+| `clave_foranea.md` | Clave foránea |
+| `relacion_muchos_a_muchos.md` | Relación muchos a muchos |
+| `normalizacion.md` | Normalización |
+| `tipos_de_dato.md` | Tipos de dato |
+| `restricciones.md` | Restricciones |
+| `indices.md` | Índices |
+
+| Constante | Valor |
+|---|---|
+| `CHUNK_SIZE` | 500 caracteres |
+| `CHUNK_OVERLAP` | 75 caracteres |
+| `MODELO_EMBEDDINGS` | `models/gemini-embedding-001` |
+| `CARPETA_CORPUS` | `corpus/` |
+| `CARPETA_VECTORSTORE` | `vectorstore/` |
+
+| Función | Responsabilidad |
+|---|---|
+| `cargar_corpus(carpeta)` | Lee cada archivo `.md` de la carpeta, en orden alfabético, como un documento con su `fuente`. Si no hay ninguno, lanza `ValueError`. |
+| `dividir_documentos(documentos, chunk_size, chunk_overlap)` | Parte cada documento en chunks con `RecursiveCharacterTextSplitter`. |
+| `construir_embeddings()` | Crea los embeddings de Gemini con la clave de `API_KEY`. Si falta, lanza `ValueError`. |
+| `generar_ids(chunks)` | Asigna a cada chunk un id formado por su fuente y su número dentro del documento, por ejemplo `clave_foranea.md_0`. |
+| `indexar_corpus(chunks, embeddings, carpeta)` | Guarda los chunks en Chroma con esos ids y elimina del índice los ids que ya no corresponden a ningún chunk. Un mismo id se actualiza en vez de duplicarse. Devuelve el `Chroma`. |
+| `cargar_vectorstore(embeddings, carpeta)` | Se reconecta al índice guardado en `vectorstore/` sin calcular ningún embedding. |
+
+El índice se guarda en `vectorstore/`, en la raíz del repositorio, que está excluida en `.gitignore`. Al ejecutar el script, `vectorstore/` contiene `chroma.sqlite3` y una carpeta con los datos del índice. Cualquier otro proceso puede consultarlo con `cargar_vectorstore`, sin volver a indexar.
+
+Si el script falla, no continúa y termina con código 1:
+
+| Falla | Mensaje |
+|---|---|
+| Sin documentos `.md` en `corpus/`, o sin `API_KEY` | El mensaje del `ValueError` |
+| Límite de peticiones (`429` o `RESOURCE_EXHAUSTED`) | `Límite de peticiones alcanzado. Espera un minuto y vuelve a ejecutar.` |
+| Clave inválida (`es_error_de_configuracion`) | `La API rechazó tu clave. Revisa el valor de API_KEY en tu ".env".` |
+| Cualquier otra falla al indexar | El tipo de la excepción y su detalle técnico |
+
+Ante una falla al indexar, el script agrega `El índice no se actualizó: vuelve a ejecutar el script.`
+
 ## Módulo `src/consumir_gemini.py`
 
 Cada función tiene una única responsabilidad:
@@ -284,12 +337,15 @@ El agente aplica el mismo criterio: `consultar_agente_seguro` y `consultar_con_m
 ## Estructura del repositorio
 
 - `src/`: código fuente.
+- `corpus/`: documentos de buenas prácticas de modelado en PostgreSQL que se indexan.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
 - `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`), las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`), la revisión manual de una muestra de esas salidas (`revision_manual.json`), los límites de la métrica de evaluación (`limites_metrica.md`), los límites de autonomía del agente (`limites_autonomia_agente.md`) y la traza de evidencia del agente (`trazas_agente.jsonl`). La carpeta `docs/borradores/`, donde el agente guarda los borradores aprobados, no se versiona.
-- `tests/`: pruebas unitarias del cliente (`test_cliente.py`), del pipeline de texto (`test_pipeline_texto.py`), de la cadena de tres pasos (`test_cadena_tres_pasos.py`), del enrutamiento (`test_enrutamiento.py`), del manejo de errores del flujo orquestado (`test_orquestacion.py`) y del agente (`test_agente.py`).
+- `tests/`: pruebas unitarias del cliente (`test_cliente.py`), del pipeline de texto (`test_pipeline_texto.py`), de la cadena de tres pasos (`test_cadena_tres_pasos.py`), del enrutamiento (`test_enrutamiento.py`), del manejo de errores del flujo orquestado (`test_orquestacion.py`), del agente (`test_agente.py`) y de la indexación (`test_indexar_corpus.py`).
 - `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos y limita la búsqueda de pruebas a `tests/`.
 - `requirements.txt`: dependencias de Python.
 - `.env.example`: plantilla de variables de entorno, sin valores reales.
+
+La carpeta `vectorstore/`, que genera `src/indexar_corpus.py`, no se versiona.
 
 ## Reglas de seguridad
 
