@@ -1,6 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Un agente con herramientas y memoria por sesión responde consultas de modelado, con aprobación humana para su única acción de riesgo alto y un registro de trazas de cada interacción. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Requisitos
 
@@ -79,6 +79,18 @@ python src/cadena_tres_pasos.py
 
 Genera, sin clasificación previa, el script de creación para la descripción de negocio de ejemplo (constante `DESCRIPCION_NEGOCIO`). Realiza 3 peticiones por ejecución.
 
+```
+python src/agente_con_herramientas.py
+```
+
+Ejecuta el agente con tres consultas de verificación (`VERIFICACIONES`): una que debe usar `consultar_buenas_practicas`, una que debe usar `verificar_sentencias_permitidas` y una pregunta general que no debe usar ninguna herramienta. Muestra la respuesta y las herramientas usadas en cada una, y comprueba que coincidan con lo esperado. Ninguna de las tres consultas pide guardar un borrador, por lo que no se solicita aprobación humana. El número de peticiones varía, porque el agente decide cuántas llamadas al modelo necesita.
+
+```
+python src/agente_con_memoria.py
+```
+
+Ejecuta el agente con memoria en una misma sesión (`supervision_riesgos`) con cuatro consultas: una por cada herramienta de riesgo bajo y dos de `guardar_borrador`, la herramienta de riesgo alto. En esas dos últimas, el programa se detiene y pide por consola la aprobación humana (`s` para aprobar, cualquier otra respuesta rechaza; se espera hasta 60 segundos). Cada ejecución agrega líneas a `docs/trazas_agente.jsonl` y, si se aprueba, crea archivos en `docs/borradores/`. Al terminar imprime las decisiones de aprobación registradas. Como `docs/trazas_agente.jsonl` está versionado como evidencia, cada ejecución lo modifica; para conservar la evidencia original se puede restaurar con `git restore docs/trazas_agente.jsonl`.
+
 Scripts complementarios, que se ejecutan de la misma forma:
 
 ```
@@ -126,12 +138,15 @@ Las pruebas unitarias están en `tests/`:
 - `test_cadena_tres_pasos.py`: que la cadena de tres pasos haga tres llamadas, que cada paso reciba la salida del anterior y que una entrada con una clave equivocada falle antes de llamar al modelo.
 - `test_enrutamiento.py`: la normalización de la clasificación y cada una de las rutas, incluida la ruta por defecto.
 - `test_orquestacion.py`: los respaldos de las rutas, la respuesta segura ante fallos fuera de las rutas, incluido el error de configuración, y las entradas vacías o que no son texto.
+- `test_agente.py`: las herramientas del agente, la aprobación humana (solo `s` aprueba; la falta de entrada y el tiempo agotado rechazan), el guardado de borradores aprobado, rechazado y con entradas no válidas, el historial separado por sesión, el registro de trazas y que un fallo al registrar la traza no impida entregar la respuesta.
 
-Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado reemplazan el modelo y las rutas por mocks o funciones falsas. Ninguna prueba consume tokens ni requiere conexión. Con el entorno activo, desde la raíz del repositorio:
+Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado y las del agente reemplazan el modelo, las rutas, la entrada por consola y la escritura de borradores por mocks o funciones falsas. Ninguna prueba consume tokens ni requiere conexión. Las pruebas del registro de trazas escriben un archivo temporal en `tests/` que se elimina al terminar. Con el entorno activo, desde la raíz del repositorio:
 
 ```
 pytest tests/ -v
 ```
+
+`pytest.ini` limita la búsqueda de pruebas a `tests/`, por lo que `prompts/test_consistencia.py`, que hace peticiones reales, no se ejecuta con `pytest`.
 
 ## Cliente `src/cliente.py`
 
@@ -191,6 +206,33 @@ Los prompts le indican al modelo que incluya los atributos que la descripción m
 | `procesar_solicitud_segura(cadena, descripcion)` | Punto de entrada del flujo: si la solicitud está vacía, pide una descripción del negocio sin llamar al modelo; si no, ejecuta la cadena completa y, si algo falla fuera de las rutas, registra el error con su traceback y devuelve una respuesta segura. |
 | `es_error_de_configuracion(error)` | Indica si un error corresponde a una clave inválida (motivo `API_KEY_INVALID`), para responder con el mensaje de configuración en vez del general. |
 
+## Agente `src/agente_con_herramientas.py` y `src/agente_con_memoria.py`
+
+Construido con LangChain (`create_tool_calling_agent` y `AgentExecutor`), con el mismo modelo, clave y `temperature=0` que el flujo orquestado. La instrucción del sistema le indica que responda en español, en no más de tres oraciones y sin formato markdown, y que use las herramientas cuando las necesite.
+
+| Herramienta | Qué hace | Nivel de riesgo |
+|---|---|---|
+| `consultar_buenas_practicas(tema, incluir_ejemplo)` | Devuelve una buena práctica de modelado sobre un tema (clave primaria, clave foránea, muchos a muchos, normalización o tipo de dato), con un ejemplo si se pide. Sus argumentos se validan con un esquema Pydantic. | Bajo |
+| `verificar_sentencias_permitidas(script)` | Revisa si un script usa solo `CREATE TABLE` y `CREATE INDEX`. | Bajo |
+| `guardar_borrador(nombre, script)` | Guarda el script en `docs/borradores/<nombre>.sql`; si el archivo existe, lo reemplaza. Sus argumentos se validan con un esquema Pydantic. | Alto |
+
+`guardar_borrador` requiere siempre aprobación humana, implementada dentro de la propia herramienta. Antes de pedirla, valida que el nombre solo tenga letras, números y guion bajo, que el script no esté vacío y que todas sus sentencias sean `CREATE TABLE` o `CREATE INDEX`; si no se cumple, devuelve el motivo sin pedir aprobación ni escribir nada. Si se cumple, `esperar_aprobacion` muestra el nombre del archivo, la cantidad de sentencias y si se crea o se reemplaza, y espera hasta 60 segundos (`TIEMPO_LIMITE_APROBACION`). Solo la respuesta `s` aprueba: cualquier otra respuesta, la falta de entrada o el tiempo agotado rechazan y no se escribe ningún archivo. Cada decisión se agrega a `registro_aprobaciones` y queda en la traza, porque la respuesta de la herramienta se guarda como observación. La carpeta `docs/borradores/` está excluida en `.gitignore`.
+
+La memoria (`agente_con_memoria.py`) guarda el historial de cada sesión en un diccionario en memoria (`historiales`), identificado por `session_id`: dos sesiones no comparten historial y los historiales se pierden al terminar el programa.
+
+| Función | Responsabilidad |
+|---|---|
+| `construir_agente(modelo, prompt)` | Arma el agente con sus tres herramientas. Devuelve un `AgentExecutor` que conserva los pasos intermedios. |
+| `consultar_agente_seguro(ejecutor_agente, entrada)` | Consulta al agente sin memoria. Si falla, devuelve un mensaje seguro (el de configuración si la clave es inválida, o el general) y `None` en lugar de las herramientas usadas. |
+| `construir_agente_con_memoria(modelo)` | Agrega al agente un historial por sesión con `RunnableWithMessageHistory`. |
+| `obtener_historial(session_id)` / `cerrar_sesion(session_id)` | Crea u obtiene el historial de una sesión y lo elimina al cerrarla. |
+| `registrar_traza(session_id, entrada, resultado, archivo)` | Agrega a `docs/trazas_agente.jsonl` una línea JSON con el momento (UTC), la sesión, la entrada, las acciones (herramienta, argumentos y observación) y la respuesta final. |
+| `consultar_con_memoria_seguro(agente_con_memoria, entrada, session_id)` | Consulta al agente con memoria y registra la traza de cada consulta exitosa. Si falla la consulta, devuelve un mensaje seguro y no registra traza. Si falla el registro de la traza, lo informa en el registro de errores y entrega igualmente la respuesta. |
+
+`RunnableWithMessageHistory` e `InMemoryChatMessageHistory` están marcadas como obsoletas por LangChain, por lo que la ejecución muestra advertencias de obsolescencia.
+
+Los niveles de riesgo, la aprobación humana, la revisión de las trazas y el procedimiento ante un comportamiento inesperado están documentados en `docs/limites_autonomia_agente.md`. La traza de evidencia está en `docs/trazas_agente.jsonl`.
+
 ## Módulo `src/consumir_gemini.py`
 
 Cada función tiene una única responsabilidad:
@@ -237,13 +279,15 @@ En el flujo orquestado, ninguna falla al procesar una solicitud detiene el progr
 | Clave inválida (motivo `API_KEY_INVALID`) | `procesar_solicitud_segura` | `ERROR` con traceback | `El servicio no está disponible por un problema de configuración. El error quedó registrado para el administrador.` |
 | Cualquier otra falla fuera de las rutas, como en la clasificación | `procesar_solicitud_segura` | `ERROR` con traceback | `No pudimos procesar tu solicitud en este momento. Intenta de nuevo más tarde.` |
 
+El agente aplica el mismo criterio: `consultar_agente_seguro` y `consultar_con_memoria_seguro` registran el error con su traceback y responden con el mensaje de configuración si la clave es inválida o con el mensaje general en cualquier otro caso. Una acción de riesgo alto sin aprobación a tiempo no es un error: se rechaza y la herramienta lo informa.
+
 ## Estructura del repositorio
 
 - `src/`: código fuente.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
-- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`), las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`), la revisión manual de una muestra de esas salidas (`revision_manual.json`) y los límites de la métrica de evaluación (`limites_metrica.md`).
-- `tests/`: pruebas unitarias del cliente (`test_cliente.py`), del pipeline de texto (`test_pipeline_texto.py`), de la cadena de tres pasos (`test_cadena_tres_pasos.py`), del enrutamiento (`test_enrutamiento.py`) y del manejo de errores del flujo orquestado (`test_orquestacion.py`).
-- `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos.
+- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`), las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`), la revisión manual de una muestra de esas salidas (`revision_manual.json`), los límites de la métrica de evaluación (`limites_metrica.md`), los límites de autonomía del agente (`limites_autonomia_agente.md`) y la traza de evidencia del agente (`trazas_agente.jsonl`). La carpeta `docs/borradores/`, donde el agente guarda los borradores aprobados, no se versiona.
+- `tests/`: pruebas unitarias del cliente (`test_cliente.py`), del pipeline de texto (`test_pipeline_texto.py`), de la cadena de tres pasos (`test_cadena_tres_pasos.py`), del enrutamiento (`test_enrutamiento.py`), del manejo de errores del flujo orquestado (`test_orquestacion.py`) y del agente (`test_agente.py`).
+- `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos y limita la búsqueda de pruebas a `tests/`.
 - `requirements.txt`: dependencias de Python.
 - `.env.example`: plantilla de variables de entorno, sin valores reales.
 
@@ -251,3 +295,4 @@ En el flujo orquestado, ninguna falla al procesar una solicitud detiene el progr
 
 - Ningún secreto (clave de API, token) se escribe en el código ni en archivos versionados.
 - Las claves viven solo en `.env`.
+- Las acciones de riesgo alto del agente requieren aprobación humana explícita y, sin respuesta a tiempo, se rechazan.
