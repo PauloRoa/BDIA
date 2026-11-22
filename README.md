@@ -1,6 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Un agente con herramientas y memoria por sesión responde consultas de modelado, con aprobación humana para su única acción de riesgo alto y un registro de trazas de cada interacción. Un índice vectorial de buenas prácticas de modelado en PostgreSQL, con los documentos divididos en chunks y sus embeddings de Gemini, se guarda en Chroma. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Un agente con herramientas y memoria por sesión responde consultas de modelado, con aprobación humana para su única acción de riesgo alto y un registro de trazas de cada interacción. Un índice vectorial de buenas prácticas de modelado en PostgreSQL, con los documentos divididos en chunks y sus embeddings de Gemini, se guarda en Chroma. Un flujo de recuperación consulta ese índice, arma un prompt con los fragmentos más relevantes numerados y obtiene una respuesta que cita su fuente. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Requisitos
 
@@ -97,6 +97,12 @@ python src/indexar_corpus.py
 
 Lee los documentos `.md` de `corpus/`, los divide en chunks de hasta 500 caracteres con un traslape de 75, calcula un embedding por chunk con `models/gemini-embedding-001` (consume tokens) y los guarda en `vectorstore/`. Al terminar se reconecta al índice guardado y muestra cuántos chunks contiene. Con el corpus actual son 14 chunks de 7 documentos. Si se vuelve a ejecutar, actualiza los chunks que ya existían sin duplicarlos, elimina los que ya no corresponden al corpus y calcula de nuevo los embeddings de todos los chunks. Si falla, muestra el motivo, termina con código 1 y no modifica el índice anterior.
 
+```
+python src/recuperacion.py
+```
+
+Hace tres preguntas de ejemplo (`PREGUNTAS_DE_PRUEBA`): dos que el corpus responde y una de PostgreSQL que no está en él. Para cada una recupera los 3 chunks más parecidos del índice guardado en `vectorstore/`, arma el prompt con el contexto numerado, lo envía al modelo con `consultar_modelo` y muestra las fuentes recuperadas, la respuesta y la fuente de cada cita. Requiere haber ejecutado antes `python src/indexar_corpus.py`. Realiza 3 cálculos de embeddings y 3 peticiones al modelo por ejecución, sin contar reintentos, y muestra el costo de cada operación del modelo. Si falla, muestra el tipo de la excepción y su detalle técnico, y termina con código 1.
+
 Scripts complementarios, que se ejecutan de la misma forma:
 
 ```
@@ -146,8 +152,9 @@ Las pruebas unitarias están en `tests/`:
 - `test_orquestacion.py`: los respaldos de las rutas, la respuesta segura ante fallos fuera de las rutas, incluido el error de configuración, y las entradas vacías o que no son texto.
 - `test_agente.py`: las herramientas del agente, la aprobación humana (solo `s` aprueba; la falta de entrada y el tiempo agotado rechazan), el guardado de borradores aprobado, rechazado y con entradas no válidas, el historial separado por sesión, el registro de trazas y que un fallo al registrar la traza no impida entregar la respuesta.
 - `test_indexar_corpus.py`: la carga del corpus, la división en chunks, los ids estables, el guardado en el índice y la eliminación de los chunks sobrantes, que un fallo de la API no toque el índice anterior, la reconexión sin recalcular embeddings y la construcción de los embeddings con la clave.
+- `test_recuperacion.py`: el contexto numerado y sus fuentes, que el prompt conserve la pregunta exacta y traiga las instrucciones de citar, el valor de k, que la recuperación se reconecte al índice sin reindexar, el rechazo de preguntas vacías y la traducción de las citas de una respuesta, incluidas las inválidas.
 
-Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado y las del agente reemplazan el modelo, las rutas, la entrada por consola y la escritura de borradores por mocks o funciones falsas; las de la indexación reemplazan Chroma y los embeddings. Ninguna prueba consume tokens ni requiere conexión. Las pruebas del registro de trazas escriben un archivo temporal en `tests/` que se elimina al terminar. Con el entorno activo, desde la raíz del repositorio:
+Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado y las del agente reemplazan el modelo, las rutas, la entrada por consola y la escritura de borradores por mocks o funciones falsas; las de la indexación y la recuperación reemplazan Chroma y los embeddings. Ninguna prueba consume tokens ni requiere conexión. Las pruebas del registro de trazas escriben un archivo temporal en `tests/` que se elimina al terminar. Con el entorno activo, desde la raíz del repositorio:
 
 ```
 pytest tests/ -v
@@ -286,6 +293,25 @@ Si el script falla, no continúa y termina con código 1:
 
 Ante una falla al indexar, el script agrega `El índice no se actualizó: vuelve a ejecutar el script.`
 
+## Recuperación `src/recuperacion.py`
+
+Recupera del índice creado por `src/indexar_corpus.py` los chunks más parecidos a una pregunta y arma con ellos un prompt que ordena citar la fuente. Reutiliza `construir_embeddings` y `cargar_vectorstore` de `indexar_corpus.py`, y envía el prompt con `consultar_modelo` de `cliente.py`.
+
+El prompt tiene tres partes: las instrucciones, el contexto (`Contexto:` seguido de los chunks numerados) y la pregunta (`Pregunta:`), y termina en `Respuesta:`. Las instrucciones indican responder usando solo el contexto, citar cada afirmación con su número entre corchetes y decir explícitamente cuando el contexto no alcanza.
+
+| Constante | Valor |
+|---|---|
+| `K_POR_DEFECTO` | 3 chunks por pregunta |
+| `FUENTE_INVALIDA` | Valor que `resolver_citas` asigna a un número que no está en el contexto |
+| `PROMPT_TEMPLATE` | Plantilla del prompt, con los marcadores `{contexto}` y `{pregunta}` |
+| `PREGUNTAS_DE_PRUEBA` | Las tres preguntas que hace el script |
+
+| Función | Responsabilidad |
+|---|---|
+| `formatear_contexto(chunks_recuperados)` | Numera los chunks desde 1 (`[1]`, `[2]`…), separados por una línea en blanco, y devuelve ese texto junto con un diccionario `{número: fuente}`. Si un chunk no tiene `fuente`, su valor es `desconocida`. |
+| `construir_prompt(pregunta, persist_directory, k)` | Se reconecta al índice guardado, recupera los k chunks más parecidos con `as_retriever` y devuelve `(prompt, citas)`. Solo calcula el embedding de la pregunta, no el del corpus. La pregunta se inserta sin modificarla. Si está vacía o no es texto, lanza `ValueError` sin consultar el índice. Por defecto usa `vectorstore/` y k = 3. |
+| `resolver_citas(respuesta, citas)` | Extrae los números entre corchetes de la respuesta y devuelve `{número: fuente}`, sin repetidos. Un número que no está en el contexto queda con el valor de `FUENTE_INVALIDA`. |
+
 ## Módulo `src/consumir_gemini.py`
 
 Cada función tiene una única responsabilidad:
@@ -340,7 +366,7 @@ El agente aplica el mismo criterio: `consultar_agente_seguro` y `consultar_con_m
 - `corpus/`: documentos de buenas prácticas de modelado en PostgreSQL que se indexan.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
 - `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`), las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`), la revisión manual de una muestra de esas salidas (`revision_manual.json`), los límites de la métrica de evaluación (`limites_metrica.md`), los límites de autonomía del agente (`limites_autonomia_agente.md`) y la traza de evidencia del agente (`trazas_agente.jsonl`). La carpeta `docs/borradores/`, donde el agente guarda los borradores aprobados, no se versiona.
-- `tests/`: pruebas unitarias del cliente (`test_cliente.py`), del pipeline de texto (`test_pipeline_texto.py`), de la cadena de tres pasos (`test_cadena_tres_pasos.py`), del enrutamiento (`test_enrutamiento.py`), del manejo de errores del flujo orquestado (`test_orquestacion.py`), del agente (`test_agente.py`) y de la indexación (`test_indexar_corpus.py`).
+- `tests/`: pruebas unitarias del cliente (`test_cliente.py`), del pipeline de texto (`test_pipeline_texto.py`), de la cadena de tres pasos (`test_cadena_tres_pasos.py`), del enrutamiento (`test_enrutamiento.py`), del manejo de errores del flujo orquestado (`test_orquestacion.py`), del agente (`test_agente.py`), de la indexación (`test_indexar_corpus.py`) y de la recuperación (`test_recuperacion.py`).
 - `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos y limita la búsqueda de pruebas a `tests/`.
 - `requirements.txt`: dependencias de Python.
 - `.env.example`: plantilla de variables de entorno, sin valores reales.
