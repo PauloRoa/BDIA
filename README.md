@@ -1,6 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Un agente con herramientas y memoria por sesión responde consultas de modelado, con aprobación humana para su única acción de riesgo alto y un registro de trazas de cada interacción. Un índice vectorial de buenas prácticas de modelado en PostgreSQL, con los documentos divididos en chunks y sus embeddings de Gemini, se guarda en Chroma. Un flujo de recuperación consulta ese índice, arma un prompt con los fragmentos más relevantes numerados y obtiene una respuesta que cita su fuente. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Un agente con herramientas y memoria por sesión responde consultas de modelado, con aprobación humana para su única acción de riesgo alto y un registro de trazas de cada interacción. Un índice vectorial de buenas prácticas de modelado en PostgreSQL, con los documentos divididos en chunks y sus embeddings de Gemini, se guarda en Chroma. Un flujo de recuperación consulta ese índice, arma un prompt con los fragmentos más relevantes numerados y obtiene una respuesta que cita su fuente. Un conjunto de preguntas con sus fragmentos relevantes etiquetados mide la precisión y el recall de esa recuperación y guarda el registro de cada corrida. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Requisitos
 
@@ -103,6 +103,18 @@ python src/recuperacion.py
 
 Hace tres preguntas de ejemplo (`PREGUNTAS_DE_PRUEBA`): dos que el corpus responde y una de PostgreSQL que no está en él. Para cada una recupera los 3 chunks más parecidos del índice guardado en `vectorstore/`, arma el prompt con el contexto numerado, lo envía al modelo con `consultar_modelo` y muestra las fuentes recuperadas, la respuesta y la fuente de cada cita. Requiere haber ejecutado antes `python src/indexar_corpus.py`. Realiza 3 cálculos de embeddings y 3 peticiones al modelo por ejecución, sin contar reintentos, y muestra el costo de cada operación del modelo. Si falla, muestra el tipo de la excepción y su detalle técnico, y termina con código 1.
 
+```
+python src/evaluacion_recuperacion.py
+```
+
+Evalúa la recuperación con 11 preguntas (`CASOS_EVALUACION`): 10 con sus chunks relevantes etiquetados y una que el corpus no puede responder. Antes de consultar comprueba que los ids relevantes existan en el índice. Para cada pregunta recupera del índice guardado en `vectorstore/` los k chunks más parecidos, con k igual a `K_POR_DEFECTO` (3), y calcula la precisión y el recall. Muestra cada pregunta con sus ids relevantes y recuperados, y los promedios, y guarda el registro en `docs/resultados_evaluacion_<fecha>_k<k>.txt`. Un argumento permite evaluar otro k:
+
+```
+python src/evaluacion_recuperacion.py 5
+```
+
+Requiere haber ejecutado antes `python src/indexar_corpus.py`. Realiza 11 cálculos de embeddings por ejecución y ninguna llamada de generación. Si se repite el mismo día con el mismo k, sobrescribe el archivo. Si falla, muestra el tipo de la excepción y su detalle técnico, y termina con código 1.
+
 Scripts complementarios, que se ejecutan de la misma forma:
 
 ```
@@ -153,8 +165,9 @@ Las pruebas unitarias están en `tests/`:
 - `test_agente.py`: las herramientas del agente, la aprobación humana (solo `s` aprueba; la falta de entrada y el tiempo agotado rechazan), el guardado de borradores aprobado, rechazado y con entradas no válidas, el historial separado por sesión, el registro de trazas y que un fallo al registrar la traza no impida entregar la respuesta.
 - `test_indexar_corpus.py`: la carga del corpus, la división en chunks, los ids estables, el guardado en el índice y la eliminación de los chunks sobrantes, que un fallo de la API no toque el índice anterior, la reconexión sin recalcular embeddings y la construcción de los embeddings con la clave.
 - `test_recuperacion.py`: el contexto numerado y sus fuentes, que el prompt conserve la pregunta exacta y traiga las instrucciones de citar, el valor de k, que la recuperación se reconecte al índice sin reindexar, el rechazo de preguntas vacías y la traducción de las citas de una respuesta, incluidas las inválidas.
+- `test_evaluacion_recuperacion.py`: la precisión y el recall, incluidos la lista vacía y el caso sin ids relevantes, el promedio que ignora los `None`, la comprobación de las etiquetas, que la evaluación consulte el retriever con cada pregunta y corte a k, el formato del registro y que los casos de evaluación sean válidos y sus ids existan en el corpus.
 
-Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado y las del agente reemplazan el modelo, las rutas, la entrada por consola y la escritura de borradores por mocks o funciones falsas; las de la indexación y la recuperación reemplazan Chroma y los embeddings. Ninguna prueba consume tokens ni requiere conexión. Las pruebas del registro de trazas escriben un archivo temporal en `tests/` que se elimina al terminar. Con el entorno activo, desde la raíz del repositorio:
+Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado y las del agente reemplazan el modelo, las rutas, la entrada por consola y la escritura de borradores por mocks o funciones falsas; las de la indexación y la recuperación reemplazan Chroma y los embeddings, y las de la evaluación reemplazan el retriever. Ninguna prueba consume tokens ni requiere conexión. Las pruebas del registro de trazas y las del guardado del registro de la evaluación escriben un archivo temporal en `tests/` que se elimina al terminar. Con el entorno activo, desde la raíz del repositorio:
 
 ```
 pytest tests/ -v
@@ -312,6 +325,71 @@ El prompt tiene tres partes: las instrucciones, el contexto (`Contexto:` seguido
 | `construir_prompt(pregunta, persist_directory, k)` | Se reconecta al índice guardado, recupera los k chunks más parecidos con `as_retriever` y devuelve `(prompt, citas)`. Solo calcula el embedding de la pregunta, no el del corpus. La pregunta se inserta sin modificarla. Si está vacía o no es texto, lanza `ValueError` sin consultar el índice. Por defecto usa `vectorstore/` y k = 3. |
 | `resolver_citas(respuesta, citas)` | Extrae los números entre corchetes de la respuesta y devuelve `{número: fuente}`, sin repetidos. Un número que no está en el contexto queda con el valor de `FUENTE_INVALIDA`. |
 
+## Evaluación `src/evaluacion_recuperacion.py`
+
+Mide qué tan bien recupera el índice creado por `src/indexar_corpus.py`. Reutiliza `cargar_vectorstore`, `construir_embeddings` y las constantes de configuración de `indexar_corpus.py`, y `K_POR_DEFECTO` de `recuperacion.py`.
+
+`CASOS_EVALUACION` tiene 11 casos, cada uno con una pregunta y el conjunto de ids de los chunks relevantes (`ids_relevantes`). Un chunk es relevante si, por sí solo, alcanza para responder la pregunta o su parte central. Las etiquetas se definieron leyendo el texto del corpus, antes de consultar el retriever. Los ids tienen el formato `<fuente>_<n>` (por ejemplo `clave_foranea.md_1`), por lo que no cambian al reindexar el mismo corpus. Hay 10 casos con respuesta en el corpus, dos de ellos con dos chunks relevantes, y uno sin respuesta, con `ids_relevantes` vacío.
+
+Las métricas se calculan sobre los k primeros resultados del retriever (el `@k` de `precision@k` y `recall@k`):
+
+- Precisión: fracción de los k ids recuperados que son relevantes. Vale 0.0 si no se recuperó ninguno.
+- Recall: fracción de los ids relevantes que se recuperaron. Es `None` (`n/a` en el registro) si el caso no tiene ids relevantes.
+- Los promedios ignoran los `None`: la pregunta sin respuesta no entra en el recall promedio, pero su precisión (0.0) sí entra en la precisión promedio.
+
+| Constante | Valor |
+|---|---|
+| `CASOS_EVALUACION` | Las 11 preguntas con sus ids relevantes |
+| `CARPETA_RESULTADOS` | `docs/` |
+
+| Función | Responsabilidad |
+|---|---|
+| `precision_at_k(ids_recuperados, ids_relevantes)` | Fracción de los ids recuperados que son relevantes; 0.0 si la lista está vacía. |
+| `recall_at_k(ids_recuperados, ids_relevantes)` | Fracción de los ids relevantes que se recuperaron; `None` si no hay ids relevantes. |
+| `promediar(valores)` | Promedio que ignora los `None`; 0.0 si no queda ningún valor. |
+| `verificar_etiquetas(casos, ids_indice)` | Lanza `ValueError` si algún id relevante no existe en el índice, para que un id mal escrito no pase como recall 0. |
+| `evaluar_recuperacion(retriever, casos, k)` | Consulta el retriever con cada pregunta, toma los ids de los primeros k chunks y calcula las métricas. Devuelve `(resultados, precisión_promedio, recall_promedio)`. |
+| `formatear_resultado(resultado)` | Línea de una pregunta: precisión, recall y pregunta. |
+| `formatear_reporte(resultados, precision_promedio, recall_promedio, k, fecha)` | Texto completo del registro. La configuración (k, `chunk_size`, `chunk_overlap`) se toma de la indexación. |
+| `guardar_reporte(ruta, texto)` | Escribe el registro en un archivo de texto UTF-8. |
+
+El registro de cada corrida se guarda en `docs/resultados_evaluacion_<fecha>_k<k>.txt`, uno por fecha y por k. Estructura, con el contenido de `docs/resultados_evaluacion_2026-11-22_k3.txt`:
+
+```
+Fecha: 2026-11-22
+Configuracion: k=3, chunk_size=500, chunk_overlap=75
+
+0.33  1.00  ¿Qué hace ON DELETE CASCADE en una clave foránea?
+0.33  1.00  ¿Por qué el correo de un cliente no es una buena clave primaria?
+0.33  1.00  ¿Dónde se guarda la cantidad de cada producto en una venta?
+0.33  1.00  ¿Hay diferencia de rendimiento entre text y varchar(n)?
+0.33  1.00  ¿Por qué el total de una venta no se guarda en la tabla venta?
+0.33  1.00  ¿Qué restricción impide que un precio sea negativo?
+0.33  1.00  ¿Cuándo no conviene agregar NOT NULL a una columna?
+0.67  1.00  ¿Conviene crear un índice sobre una clave foránea?
+0.33  0.50  ¿Qué crea PostgreSQL automáticamente al definir una clave primaria?
+0.33  1.00  ¿En qué casos no conviene indexar una columna?
+0.00  n/a  ¿Cómo se hace un respaldo de la base de datos?
+
+promedio -> precision: 0.333  recall: 0.950
+```
+
+Un recall `n/a` corresponde a un caso sin ids relevantes.
+
+Resultados registrados el 2026-11-22, con el índice de 14 chunks (`chunk_size=500`, `chunk_overlap=75`). Cada fila es el promedio de las 11 preguntas, y el recall excluye la pregunta sin respuesta:
+
+| k | Precisión | Recall | Archivo |
+|---|---|---|---|
+| 1 | 0.818 | 0.800 | `docs/resultados_evaluacion_2026-11-22_k1.txt` |
+| 2 | 0.455 | 0.850 | `docs/resultados_evaluacion_2026-11-22_k2.txt` |
+| 3 | 0.333 | 0.950 | `docs/resultados_evaluacion_2026-11-22_k3.txt` |
+| 4 | 0.273 | 1.000 | `docs/resultados_evaluacion_2026-11-22_k4.txt` |
+| 5 | 0.218 | 1.000 | `docs/resultados_evaluacion_2026-11-22_k5.txt` |
+
+![Precisión y recall según k](docs/precision_recall_por_k.png)
+
+Con un solo chunk relevante por pregunta, la precisión máxima posible con k chunks es 1/k.
+
 ## Módulo `src/consumir_gemini.py`
 
 Cada función tiene una única responsabilidad:
@@ -365,8 +443,8 @@ El agente aplica el mismo criterio: `consultar_agente_seguro` y `consultar_con_m
 - `src/`: código fuente.
 - `corpus/`: documentos de buenas prácticas de modelado en PostgreSQL que se indexan.
 - `prompts/`: banco de prompts (`banco.py`), script de prueba de consistencia (`test_consistencia.py`) y su registro de resultados (`registro_resultados.json`).
-- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`), las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`), la revisión manual de una muestra de esas salidas (`revision_manual.json`), los límites de la métrica de evaluación (`limites_metrica.md`), los límites de autonomía del agente (`limites_autonomia_agente.md`) y la traza de evidencia del agente (`trazas_agente.jsonl`). La carpeta `docs/borradores/`, donde el agente guarda los borradores aprobados, no se versiona.
-- `tests/`: pruebas unitarias del cliente (`test_cliente.py`), del pipeline de texto (`test_pipeline_texto.py`), de la cadena de tres pasos (`test_cadena_tres_pasos.py`), del enrutamiento (`test_enrutamiento.py`), del manejo de errores del flujo orquestado (`test_orquestacion.py`), del agente (`test_agente.py`), de la indexación (`test_indexar_corpus.py`) y de la recuperación (`test_recuperacion.py`).
+- `docs/`: documentación y evidencias. Incluye la evidencia de la primera petición autenticada (`evidencia_peticion_autenticada.txt` y `.png`), el diagrama de arquitectura (`diagrama_arquitectura.png`), el registro de la decisión de arquitectura (`decision-arquitectura.md`), los datos de la comparación de modelos (`resultados_comparacion.json`), el registro de los ensayos de instalación limpia y de rate limit (`registro_ensayos.md`), el registro de la comparación con el pipeline de texto (`registro_pipeline_texto.md`), las métricas calculadas sobre las salidas del cliente (`resultados_metricas.json`), la revisión manual de una muestra de esas salidas (`revision_manual.json`), los límites de la métrica de evaluación (`limites_metrica.md`), los límites de autonomía del agente (`limites_autonomia_agente.md`), la traza de evidencia del agente (`trazas_agente.jsonl`), los registros de la evaluación de la recuperación (`resultados_evaluacion_<fecha>_k<k>.txt`) y su gráfico (`precision_recall_por_k.png`). La carpeta `docs/borradores/`, donde el agente guarda los borradores aprobados, no se versiona.
+- `tests/`: pruebas unitarias del cliente (`test_cliente.py`), del pipeline de texto (`test_pipeline_texto.py`), de la cadena de tres pasos (`test_cadena_tres_pasos.py`), del enrutamiento (`test_enrutamiento.py`), del manejo de errores del flujo orquestado (`test_orquestacion.py`), del agente (`test_agente.py`), de la indexación (`test_indexar_corpus.py`), de la recuperación (`test_recuperacion.py`) y de su evaluación (`test_evaluacion_recuperacion.py`).
 - `pytest.ini`: configuración de pytest; agrega `src/` a la ruta de importación para que las pruebas encuentren los módulos y limita la búsqueda de pruebas a `tests/`.
 - `requirements.txt`: dependencias de Python.
 - `.env.example`: plantilla de variables de entorno, sin valores reales.

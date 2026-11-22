@@ -1,0 +1,16 @@
+Fecha: 2026-11-22
+Configuracion: k=5, chunk_size=500, chunk_overlap=75
+
+0.20  1.00  ¿Qué hace ON DELETE CASCADE en una clave foránea?
+0.20  1.00  ¿Por qué el correo de un cliente no es una buena clave primaria?
+0.20  1.00  ¿Dónde se guarda la cantidad de cada producto en una venta?
+0.20  1.00  ¿Hay diferencia de rendimiento entre text y varchar(n)?
+0.20  1.00  ¿Por qué el total de una venta no se guarda en la tabla venta?
+0.20  1.00  ¿Qué restricción impide que un precio sea negativo?
+0.20  1.00  ¿Cuándo no conviene agregar NOT NULL a una columna?
+0.40  1.00  ¿Conviene crear un índice sobre una clave foránea?
+0.40  1.00  ¿Qué crea PostgreSQL automáticamente al definir una clave primaria?
+0.20  1.00  ¿En qué casos no conviene indexar una columna?
+0.00  n/a  ¿Cómo se hace un respaldo de la base de datos?
+
+promedio -> precision: 0.218  recall: 1.000
