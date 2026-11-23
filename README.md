@@ -1,6 +1,6 @@
 # Proyecto BDIA
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). A partir de la descripción de un negocio, genera el borrador del script de creación de una base de datos PostgreSQL nueva. Reúne un cliente para la API de Google Gemini con reintentos y registro de costo, un flujo orquestado con LangChain, un agente con herramientas, memoria y aprobación humana, y un flujo RAG con índice vectorial, recuperación con citas, evaluación y registro de latencia y costo. Incluye además el pipeline de texto con sus métricas, la comparación de modelos y el banco de prompts.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). A partir de la descripción de un negocio, genera el borrador del script de creación de una base de datos PostgreSQL nueva. Reúne un cliente para la API de Google Gemini con reintentos y registro de costo, un flujo orquestado con LangChain, un agente con herramientas, memoria y aprobación humana, y un flujo RAG con índice vectorial, recuperación con citas, evaluación y registro de latencia y costo. Incluye además el pipeline de texto con sus métricas, la comparación de modelos, el banco de prompts y un dataset de ejemplos validado para personalizar un modelo con PEFT.
 
 El detalle técnico de cada módulo está en [docs/referencia_tecnica.md](docs/referencia_tecnica.md).
 
@@ -69,6 +69,7 @@ Con el entorno activo, desde la raíz del repositorio, cada comando se ejecuta c
 | `python src/recuperacion.py` | Responde 3 preguntas de ejemplo con los chunks recuperados y sus citas | 3 embeddings y 3 peticiones |
 | `python src/evaluacion_recuperacion.py` | Mide la precisión y el recall de la recuperación con 11 preguntas etiquetadas y guarda el registro en `docs/` | 11 embeddings, sin generación |
 | `python src/registro_rag.py` | Mide la latencia de cada etapa del flujo RAG y los tokens y el costo reales con 3 preguntas; agrega 3 líneas a `docs/registros_latencia_costo.jsonl` | 3 embeddings y 3 peticiones de generación |
+| `python src/dataset_tuning.py` | Construye 16 ejemplos de relaciones entre entidades para personalizar un modelo con PEFT, muestra el balance por tipo de relación y valida el dataset | Ninguna |
 | `python src/evaluar_salidas.py` | Calcula precisión, cobertura y F1 de 20 respuestas frente a una referencia propia y guarda `docs/resultados_metricas.json` | 20 peticiones |
 | `python src/revision_manual.py` | Guarda la revisión manual de una muestra en `docs/revision_manual.json` | Ninguna |
 | `python src/pipeline_texto.py` | Compara 3 respuestas con su referencia, sobre texto crudo y procesado, y guarda `docs/registro_pipeline_texto.md` | 3 peticiones |

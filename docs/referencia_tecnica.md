@@ -15,12 +15,13 @@ Detalle del funcionamiento de cada módulo de Proyecto BDIA. La instalación y l
 9. [Recuperación `src/recuperacion.py`](#recuperación-srcrecuperacionpy)
 10. [Evaluación `src/evaluacion_recuperacion.py`](#evaluación-srcevaluacion_recuperacionpy)
 11. [Registro de latencia y costo `src/registro_rag.py`](#registro-de-latencia-y-costo-srcregistro_ragpy)
-12. [Manejo de errores](#manejo-de-errores)
-13. [Contenido de `docs/`](#contenido-de-docs)
+12. [Dataset de personalización `src/dataset_tuning.py`](#dataset-de-personalización-srcdataset_tuningpy)
+13. [Manejo de errores](#manejo-de-errores)
+14. [Contenido de `docs/`](#contenido-de-docs)
 
 ## Alcance
 
-Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Un agente con herramientas y memoria por sesión responde consultas de modelado, con aprobación humana para su única acción de riesgo alto y un registro de trazas de cada interacción. Un índice vectorial de buenas prácticas de modelado en PostgreSQL, con los documentos divididos en chunks y sus embeddings de Gemini, se guarda en Chroma. Un flujo de recuperación consulta ese índice, arma un prompt con los fragmentos más relevantes numerados y obtiene una respuesta que cita su fuente. Un conjunto de preguntas con sus fragmentos relevantes etiquetados mide la precisión y el recall de esa recuperación y guarda el registro de cada corrida. Otro script mide la latencia de cada etapa del flujo RAG completo y registra los tokens y el costo reales de cada consulta. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
+Repositorio del proyecto de la especialización en IA avanzada (Skillnest / Accenture). Contiene un cliente Python para la API de Google Gemini que arma las peticiones, clasifica los errores del proveedor, reintenta automáticamente los que son momentáneos con backoff exponencial y registra el costo de cada operación. Incluye además un flujo orquestado con LangChain que clasifica cada solicitud según el alcance del servicio y, si describe un negocio, genera en tres pasos encadenados el script de creación de una base de datos PostgreSQL nueva, con respaldos ante fallos en cada ruta. Un agente con herramientas y memoria por sesión responde consultas de modelado, con aprobación humana para su única acción de riesgo alto y un registro de trazas de cada interacción. Un índice vectorial de buenas prácticas de modelado en PostgreSQL, con los documentos divididos en chunks y sus embeddings de Gemini, se guarda en Chroma. Un flujo de recuperación consulta ese índice, arma un prompt con los fragmentos más relevantes numerados y obtiene una respuesta que cita su fuente. Un conjunto de preguntas con sus fragmentos relevantes etiquetados mide la precisión y el recall de esa recuperación y guarda el registro de cada corrida. Otro script mide la latencia de cada etapa del flujo RAG completo y registra los tokens y el costo reales de cada consulta. Un conjunto de ejemplos de entrada y salida para personalizar un modelo con PEFT, con su balance por tipo de relación y su validación, se prepara sin llamadas a la API. Completan el repositorio un pipeline de limpieza y tokenización de texto con métricas de precisión, cobertura y F1 para comparar las respuestas del modelo con referencias propias, una revisión manual de esas respuestas con sus límites documentados, la comparación de modelos candidatos, el registro de la decisión de arquitectura sobre el modelo utilizado y un banco de prompts de sistema con salida JSON estructurada, validado por consistencia.
 
 ## Ejecución de los scripts
 
@@ -98,6 +99,12 @@ python src/registro_rag.py 6
 
 Requiere haber ejecutado antes `python src/indexar_corpus.py`. Realiza 3 cálculos de embeddings y 3 peticiones de generación por ejecución. No sobrescribe el archivo: cada ejecución agrega 3 líneas. Si falla, muestra el tipo de la excepción y su detalle técnico, y termina con código 1; las líneas ya guardadas se conservan.
 
+```
+python src/dataset_tuning.py
+```
+
+Construye los 16 ejemplos de `EJEMPLOS_RAW`, muestra el primero, cuenta las relaciones de cada tipo con la razón entre el tipo más y el menos representado, y valida el dataset: imprime la cantidad de problemas encontrados y los lista. No realiza peticiones ni envía ningún trabajo de entrenamiento.
+
 Scripts complementarios, que se ejecutan de la misma forma:
 
 ```
@@ -150,8 +157,9 @@ Las pruebas unitarias están en `tests/`:
 - `test_recuperacion.py`: el contexto numerado y sus fuentes, que el prompt conserve la pregunta exacta y traiga las instrucciones de citar, el valor de k, que la recuperación se reconecte al índice sin reindexar, el rechazo de preguntas vacías y la traducción de las citas de una respuesta, incluidas las inválidas.
 - `test_evaluacion_recuperacion.py`: la precisión y el recall, incluidos la lista vacía y el caso sin ids relevantes, el promedio que ignora los `None`, la comprobación de las etiquetas, que la evaluación consulte el retriever con cada pregunta y corte a k, el formato del registro y que los casos de evaluación sean válidos y sus ids existan en el corpus.
 - `test_registro_rag.py`: el registro con sus claves y el costo calculado con los tokens reales, la medición de cada etapa con un reloj simulado, que el embedding se calcule una vez y la búsqueda se haga por vector, el prompt con el contexto numerado, el caso sin `usage_metadata`, el rechazo de preguntas no válidas, de un k menor a 1 y del índice vacío sin llamar a la API, el guardado de una línea JSON por registro y que las preguntas del registro pertenezcan a los casos de evaluación.
+- `test_dataset_tuning.py`: que el dataset real tenga al menos 10 ejemplos y ningún problema, que cubra los tres tipos de relación dentro de la razón de referencia, la serialización de la salida, la lectura de las entidades, el balance y que el validador detecte cada problema: texto o salida vacíos, entrada duplicada o con el mismo conjunto de entidades, salida que no es JSON (por ejemplo, con comillas simples) o que no es un objeto, clave faltante, lista de relaciones vacía, tipo no permitido, entidades que no están en la entrada, relaciones consigo misma o repetidas, y relaciones con claves de más o de menos.
 
-Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado y las del agente reemplazan el modelo, las rutas, la entrada por consola y la escritura de borradores por mocks o funciones falsas; las de la indexación y la recuperación reemplazan Chroma y los embeddings, las de la evaluación reemplazan el retriever, y las del registro de latencia y costo reemplazan los embeddings, el índice y el modelo. Ninguna prueba consume tokens ni requiere conexión. Las pruebas del registro de trazas, las del guardado del registro de la evaluación y las del guardado del registro de latencia y costo escriben un archivo temporal en `tests/` que se elimina al terminar. Con el entorno activo, desde la raíz del repositorio:
+Las pruebas del cliente simulan la API y las esperas con mocks; las del flujo orquestado y las del agente reemplazan el modelo, las rutas, la entrada por consola y la escritura de borradores por mocks o funciones falsas; las de la indexación y la recuperación reemplazan Chroma y los embeddings, las de la evaluación reemplazan el retriever, las del registro de latencia y costo reemplazan los embeddings, el índice y el modelo, y las del dataset no necesitan simulación, porque no usan la API. Ninguna prueba consume tokens ni requiere conexión. Las pruebas del registro de trazas, las del guardado del registro de la evaluación y las del guardado del registro de latencia y costo escriben un archivo temporal en `tests/` que se elimina al terminar. Con el entorno activo, desde la raíz del repositorio:
 
 ```
 pytest tests/ -v
@@ -476,6 +484,51 @@ Fallas del script:
 | k menor a 1 | `ValueError`: `k debe ser al menos 1.` |
 | Ningún chunk recuperado (índice vacío o inexistente) | `ValueError`: `No se recuperó ningún chunk: ejecuta antes src/indexar_corpus.py.` |
 | Cualquier otra falla al ejecutar el script | Muestra el tipo de la excepción y su detalle técnico, y termina con código 1 |
+
+## Dataset de personalización `src/dataset_tuning.py`
+
+Prepara y valida los ejemplos con que se entrenaría un adaptador PEFT para proponer las relaciones principales entre un conjunto de entidades, la misma tarea del prompt `proponer_relaciones` de `prompts/banco.py`. No llama a la API ni envía ningún trabajo de entrenamiento. Usa `types.TuningExample` del paquete `google-genai`.
+
+Cada ejemplo es un par: la entrada (`Entidades: A, B, C.`) y la salida exacta que debe producir el modelo, un JSON con la clave `relaciones`, una lista de objetos con `origen`, `destino` y `tipo` (`1:1`, `1:N` o `N:M`). El tipo se lee de origen a destino; en `1:N`, el origen es el lado «1». Los nombres de entidad van sin tilde. `EJEMPLOS_RAW` tiene 16 ejemplos con 34 relaciones: 18 `1:N`, 9 `N:M` y 7 `1:1`.
+
+| Constante | Valor |
+|---|---|
+| `TIPOS_PERMITIDOS` | `1:1`, `1:N` y `N:M` |
+| `CLAVES_RELACION` | `origen`, `destino` y `tipo` |
+| `RAZON_MAXIMA_REFERENCIA` | 3.0: razón de referencia entre el tipo más y el menos representado; el script la muestra y no falla si se supera |
+| `EJEMPLOS_RAW` | Los 16 ejemplos, como pares (entrada, salida) |
+
+| Función | Responsabilidad |
+|---|---|
+| `construir_ejemplos(ejemplos_raw)` | Convierte cada par en un `types.TuningExample`, con la salida serializada como JSON. |
+| `extraer_entidades_de_entrada(texto)` | Lee la lista de entidades de una entrada con la forma `Entidades: A, B.` |
+| `chequear_balance(ejemplos_raw)` | Cuenta las relaciones de cada tipo en todo el dataset y devuelve un `Counter`. |
+| `razon_balance(balance)` | Razón entre el tipo más y el menos representado; 0.0 si el conteo está vacío. |
+| `validar_relaciones(indice, texto, salida)` | Revisa las relaciones de un ejemplo y devuelve la lista de problemas. |
+| `validar_dataset(examples, claves_esperadas)` | Revisa cada ejemplo y devuelve la lista de problemas de todo el dataset, sin detenerse en el primero; la lista vacía indica que el dataset es válido. |
+
+Qué revisa el validador en cada ejemplo:
+
+- Que `text_input` y `output` no estén vacíos.
+- Que `text_input` no esté duplicado ni repita el conjunto de entidades de otro ejemplo, aunque estén en otro orden.
+- Que `output` sea JSON válido (comillas dobles) y un objeto con la clave `relaciones`.
+- Que `relaciones` sea una lista no vacía y que cada relación tenga exactamente las claves `origen`, `destino` y `tipo`.
+- Que `tipo` sea uno de los permitidos y que `origen` y `destino` estén entre las entidades de la entrada.
+- Que ninguna relación sea de una entidad consigo misma ni esté repetida (mismo origen y destino).
+
+Salida del script:
+
+```
+16 ejemplos construidos
+output='{"relaciones": [{"origen": "Cliente", "destino": "Pedido", "tipo": "1:N"}, {"origen": "Pedido", "destino": "Producto", "tipo": "N:M"}, {"origen": "Pedido", "destino": "Pago", "tipo": "1:N"}]}' text_input='Entidades: Cliente, Producto, Pedido, Pago.'
+
+1:N: 18
+N:M: 9
+1:1: 7
+razon max/min: 2.6x (referencia: 3.0x)
+
+16 ejemplos, 0 problemas encontrados
+```
 
 ## Manejo de errores
 
